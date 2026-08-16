@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+data_cache/
+*.csv
+!requirements.txt
+.venv/
+venv/
