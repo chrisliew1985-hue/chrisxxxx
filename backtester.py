@@ -41,6 +41,7 @@ import numpy as np
 import pandas as pd
 
 from data import load_prices
+from watchlists import PRESETS, resolve
 
 
 # --------------------------------------------------------------------------- #
@@ -257,7 +258,11 @@ def main(argv=None):
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument("--ticker", "-t", nargs="+", default=["AAPL"],
-                   help="One or more ticker symbols, e.g. -t AAPL MSFT NVDA")
+                   help="Tickers and/or preset basket names, e.g. -t AAPL MSFT "
+                        "or -t megacap volatile")
+    p.add_argument("--preset", nargs="+", default=None,
+                   help="US-market basket(s) to test: "
+                        + ", ".join(sorted(PRESETS)) + " (alias for --ticker)")
     p.add_argument("--strategy", "-s", choices=list(SIGNALS), default="everyday",
                    help="Entry signal to test")
     p.add_argument("--hold", type=int, default=3, help="Max trading days to hold")
@@ -278,7 +283,11 @@ def main(argv=None):
                    help="Write the full per-trade log to this CSV path")
     args = p.parse_args(argv)
 
-    for ticker in args.ticker:
+    raw = list(args.preset) if args.preset else list(args.ticker)
+    tickers = resolve(raw)
+
+    summary = []
+    for ticker in tickers:
         try:
             df = load_prices(
                 ticker, start=args.start, end=args.end,
@@ -294,6 +303,42 @@ def main(argv=None):
         trades = simulate(df, sig, args.hold, args.target, args.stop, args.cost)
         report(ticker, df, trades, args)
         print()
+        if not trades.empty:
+            net = trades["net_return_pct"]
+            _, total, _ = non_overlapping_equity(trades)
+            summary.append({
+                "ticker": ticker,
+                "trades": len(trades),
+                "hit_target_pct": trades["hit_target_in_window"].mean() * 100,
+                "win_rate_pct": (net > 0).mean() * 100,
+                "expectancy_pct": net.mean(),
+                "strategy_total_pct": total,
+                "buyhold_pct": buy_and_hold_pct(df),
+            })
+
+    if len(summary) > 1:
+        print_summary(summary, args)
+
+
+def print_summary(summary, args):
+    print("#" * 78)
+    print(f"  SUMMARY — strategy='{args.strategy}', hold {args.hold}d, "
+          f"target +{args.target:.0f}% / stop -{args.stop:.0f}%")
+    print("#" * 78)
+    print(f"  {'Ticker':<8}{'Trades':>7}{'Hit10%':>8}{'WinRate':>9}"
+          f"{'Expect':>9}{'StratTot':>10}{'Buy&Hold':>10}")
+    print("  " + "-" * 74)
+    for r in sorted(summary, key=lambda x: x["expectancy_pct"], reverse=True):
+        print(f"  {r['ticker']:<8}{r['trades']:>7}{r['hit_target_pct']:>7.1f}%"
+              f"{r['win_rate_pct']:>8.1f}%{r['expectancy_pct']:>+8.2f}%"
+              f"{r['strategy_total_pct']:>+9.1f}%{r['buyhold_pct']:>+9.1f}%")
+    print("  " + "-" * 74)
+    beat = sum(1 for r in summary if r["strategy_total_pct"] > r["buyhold_pct"])
+    pos = sum(1 for r in summary if r["expectancy_pct"] > 0)
+    print(f"  Positive expectancy: {pos}/{len(summary)} names   |   "
+          f"Beat buy & hold: {beat}/{len(summary)} names")
+    print("  'Expect' (avg % per trade) is the column that decides if you make money.")
+    print("#" * 78)
 
 
 if __name__ == "__main__":
