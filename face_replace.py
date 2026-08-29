@@ -15,7 +15,7 @@ Models (all fetched by setup_face_replace.sh):
     buffalo_l          detection + ArcFace embeddings
     inswapper_128      the swap itself
     xseg_1             occlusion-aware face mask
-    gfpgan_1.4         optional face restoration (off by default, see --enhance)
+    gfpgan_1.4         optional face restoration (off by default -- costs time)
 """
 
 from __future__ import annotations
@@ -64,10 +64,14 @@ def decoder(path: str, crop):
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, bufsize=10 ** 8)
 
 
-def encoder(path, w, h, fps, audio_from, crf, preset):
+def encoder(path, w, h, fps, audio_from, crf, preset, audio_secs=None):
     cmd = ["ffmpeg", "-v", "error", "-y",
            "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{w}x{h}", "-r", f"{fps}", "-i", "-"]
     if audio_from:
+        # trim the audio to the frames actually rendered; on a full run this is
+        # the whole track, on a --max-frames preview it stops with the picture
+        if audio_secs:
+            cmd += ["-t", f"{audio_secs:.4f}"]
         cmd += ["-i", audio_from, "-map", "0:v:0", "-map", "1:a:0", "-c:a", "aac", "-b:a", "160k"]
     cmd += ["-c:v", "libx264", "-preset", preset, "-crf", str(crf),
             "-pix_fmt", "yuv420p", "-colorspace", "bt709", "-color_primaries", "bt709",
@@ -214,9 +218,10 @@ def main() -> None:
                     help="min gap between the two leads' scores; below this the "
                          "track is left alone rather than risk a swap of identity")
     ap.add_argument("--enhance", type=float, default=0.0,
-                    help="GFPGAN blend 0..1. Off by default: it re-hallucinates "
-                         "detail per frame, which shimmers in motion, and costs "
-                         "~2.6 s per face on CPU")
+                    help="GFPGAN blend 0..1. Off by default on cost, not on "
+                         "quality: ~2.6 s per face on CPU, which on a clip this "
+                         "size is close to two extra hours for a modest gain in "
+                         "sharpness")
     ap.add_argument("--max-frames", type=int, default=None)
     ap.add_argument("--threads", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--crf", type=int, default=18)
@@ -342,7 +347,9 @@ def main() -> None:
 
     # ---------------- pass B: swap, paste, encode ---------------- #
     audio = args.input if info["has_audio"] else None
-    out = encoder(args.output, canvas[0], canvas[1], info["fps"], audio, args.crf, args.preset)
+    partial = total < int(round(info["duration"] * info["fps"]))
+    out = encoder(args.output, canvas[0], canvas[1], info["fps"], audio, args.crf,
+                  args.preset, audio_secs=(total / info["fps"]) if partial else None)
     proc = decoder(args.input, crop)
     print(f"\npass B  swapping and encoding -> {args.output}")
     t0, swapped = time.time(), 0
