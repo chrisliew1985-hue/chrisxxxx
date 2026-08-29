@@ -1,6 +1,6 @@
 # model weights are fetched by setup.sh, not tracked
 models/
-# intermediate depth cache
-out/.cache/
+# rendered videos and the depth cache stay out of the repo
+out/
 __pycache__/
 *.pyc
