@@ -640,20 +640,30 @@ def render_shot(ff: str, shot: Shot, plan: Plan, work: Path, idx: int, verbose: 
 
 def free_slot(window: tuple[float, float], reserved: list[tuple[float, float]],
               gap: float = 0.35) -> tuple[float, float] | None:
-    """Largest sub-window of `window` not colliding with anything reserved."""
+    """Largest part of `window` that no reserved interval overlaps.
+
+    Subtract the reserved blocks (padded by `gap`) from the window and keep the
+    widest survivor. Anchoring candidate starts on the reserved edges instead
+    lets a start land outside the window entirely, which puts every caption on
+    screen at once.
+    """
     start, end = window
-    best: tuple[float, float] | None = None
-    edges = [start] + [b + gap for _, b in reserved] 
-    for s0 in edges:
-        if s0 >= end:
+    if end <= start:
+        return None
+    free: list[tuple[float, float]] = []
+    cursor = start
+    for a, b in sorted((a - gap, b + gap) for a, b in reserved):
+        if b <= cursor or a >= end:
             continue
-        e0 = end
-        for a, b in reserved:
-            if a - gap > s0:
-                e0 = min(e0, a - gap)
-        if e0 > s0 and (best is None or e0 - s0 > best[1] - best[0]):
-            best = (s0, e0)
-    return best
+        if a > cursor:
+            free.append((cursor, min(a, end)))
+        cursor = max(cursor, b)
+        if cursor >= end:
+            break
+    if cursor < end:
+        free.append((cursor, end))
+    free = [(a, b) for a, b in free if b > a]
+    return max(free, key=lambda f: f[1] - f[0]) if free else None
 
 
 def build_overlays(plan: Plan, work: Path) -> list[tuple[Path, float, float]]:
