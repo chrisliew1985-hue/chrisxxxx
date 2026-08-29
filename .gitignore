@@ -1,0 +1,6 @@
+# model weights are fetched by setup.sh, not tracked
+models/
+# intermediate depth cache
+out/.cache/
+__pycache__/
+*.pyc
