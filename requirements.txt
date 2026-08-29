@@ -1,0 +1,2 @@
+Pillow>=10.0
+imageio-ffmpeg>=0.5   # ships a static ffmpeg; skip if you already have ffmpeg on PATH

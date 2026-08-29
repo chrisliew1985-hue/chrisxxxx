@@ -1,0 +1,11 @@
+{
+  "_comment": "Full control per shot. Paths are relative to this file. Run: python3 walkthrough.py --shotlist examples/shotlist.example.json -o out.mp4",
+  "shots": [
+    { "photo": "../photos/01_living.jpg",  "caption": "Living · north-facing",  "duration": 4.5, "move": "push_in" },
+    { "photo": "../photos/02_kitchen.jpg", "caption": "Open kitchen",           "duration": 3.5, "move": "pan_right" },
+    { "photo": "../photos/03_master.jpg",  "caption": "Master · ensuite",       "duration": 4.0, "move": "tilt_down" },
+    { "photo": "../photos/04_bath.jpg",    "caption": "",                       "duration": 3.0, "move": "push_in_left" },
+    { "photo": "../photos/05_balcony.jpg", "caption": "Balcony",                "duration": 3.5, "move": "pull_out" },
+    { "photo": "../photos/06_view.jpg",    "caption": "Unblocked view",         "duration": 5.0, "move": "push_in" }
+  ]
+}
