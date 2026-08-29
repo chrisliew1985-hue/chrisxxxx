@@ -7,8 +7,9 @@ Pillow and ffmpeg.
 Built for property listings (vertical reels for Xiaohongshu / TikTok /
 Instagram, or 16:9 for YouTube), but it works for any photo set.
 
-> This is edit-style B-roll: real photos, moved and graded. It does not
-> animate the contents of a photo — that needs an image-to-video model.
+By default this is edit-style B-roll: real photos, moved and graded. Pass
+`--animate` and each photo is first turned into a real motion clip by
+Higgsfield, which this then cuts together the same way.
 
 ## Install
 
@@ -47,6 +48,35 @@ python3 -m broll photos/ \
 ```
 
 See `examples/woodlands/` for that command as a runnable script.
+
+## AI motion (optional)
+
+`--animate` replaces the Ken Burns crop with a generated clip per photo:
+Higgsfield animates the still, and everything downstream — cross-fades,
+captions, title, end card, grade, music — works exactly as before.
+
+```bash
+npm i -g @higgsfield/cli
+higgsfield auth login          # opens a browser
+
+python3 -m broll photos/ --animate --preset property -o listing.mp4
+```
+
+Each clip's own length sets how long it is held, so pacing follows what the
+model actually produced. Generated clips are written to an `animated/` folder
+beside the output and **reused on the next run** — generation costs credits,
+so delete a clip to force a new take.
+
+| Flag | |
+|---|---|
+| `--animate-model` | default `seedance_2_0` |
+| `--animate-prompt` | the motion prompt; the default tells the model to move the camera and leave the room alone |
+| `--animate-aspect` | defaults to the preset's own shape |
+| `--animate-dir` | where clips are kept and reused |
+| `--animate-timeout` | per generation, default `20m` |
+
+The CLI is found on `PATH` as `higgsfield` or `hf`, or via
+`BROLL_HIGGSFIELD=/path/to/higgsfield`.
 
 ## Presets
 
@@ -123,3 +153,4 @@ text layers on disk.
 | `broll/text.py` | type rendering, wrapping, the gradient scrim |
 | `broll/graph.py` | the ffmpeg filtergraph |
 | `broll/media.py` | finding and running ffmpeg |
+| `broll/animate.py` | driving the Higgsfield CLI for `--animate` |

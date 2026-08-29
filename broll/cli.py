@@ -7,6 +7,7 @@ import shutil
 import tempfile
 
 from . import captions as captions_mod
+from . import animate as animate_mod
 from . import graph, images, media, motion, presets, text
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic"}
@@ -100,6 +101,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                        help="skip the gradient that darkens the bottom of frame")
     words.add_argument("--font", help="font file for all text")
 
+    ai = parser.add_argument_group("AI motion (Higgsfield)")
+    ai.add_argument("--animate", action="store_true",
+                    help="generate a motion clip per photo with Higgsfield, "
+                         "instead of moving the still with a Ken Burns crop")
+    ai.add_argument("--animate-model", default=animate_mod.DEFAULT_MODEL,
+                    help=f"Higgsfield model (default: {animate_mod.DEFAULT_MODEL})")
+    ai.add_argument("--animate-prompt", default=animate_mod.DEFAULT_PROMPT,
+                    help="motion prompt applied to every photo")
+    ai.add_argument("--animate-aspect", help="aspect ratio to ask for, e.g. 9:16 "
+                                             "(default: the preset's own shape)")
+    ai.add_argument("--animate-dir", help="where generated clips are kept and reused "
+                                          "(default: an 'animated' folder beside the output)")
+    ai.add_argument("--animate-timeout", default="20m",
+                    help="how long to wait for one generation (default: 20m)")
+
     sound = parser.add_argument_group("sound")
     sound.add_argument("--music", help="audio track; looped if shorter than the film")
     sound.add_argument("--music-volume", type=float, default=0.8)
@@ -123,26 +139,77 @@ def _center_stack(specs: list[text.TextSpec], gaps: list[int], height: int) -> N
         top += heights[index] + (gaps[index] if index < len(gaps) else 0)
 
 
+def _animated_clips(args, preset, photo_paths) -> list[graph.Clip]:
+    """Generate a motion clip per photo, and let each one's real length set its hold."""
+    videos = animate_mod.animate(
+        photo_paths,
+        args.animate_dir or os.path.join(os.path.dirname(os.path.abspath(args.out)), "animated"),
+        model=args.animate_model,
+        prompt=args.animate_prompt,
+        aspect_ratio=args.animate_aspect or _aspect_ratio(preset),
+        wait_timeout=args.animate_timeout,
+        verbose=args.verbose,
+    )
+
+    clips: list[graph.Clip] = []
+    for video in videos:
+        # A generated clip is short; hold it for as long as it actually runs,
+        # within the pacing the preset asks for.
+        length = min(max(media.probe_duration(video), preset.transition + 0.5), MAX_HOLD)
+        clips.append(graph.Clip(
+            source=video,
+            frames=round(length * preset.fps),
+            move="still",
+            is_video=True,
+        ))
+    return clips
+
+
+def _aspect_ratio(preset) -> str:
+    """The preset's frame shape, in the form the Higgsfield CLI expects."""
+    from math import gcd
+
+    divisor = gcd(preset.width, preset.height)
+    return f"{preset.width // divisor}:{preset.height // divisor}"
+
+
 def build_clips(args, preset, work_dir, photo_paths, caption_lines) -> list[graph.Clip]:
+    if args.animate:
+        clips = _animated_clips(args, preset, photo_paths)
+        _add_text(args, preset, clips, caption_lines)
+        if args.end_card:
+            clips.append(_end_card_clip(args, preset, work_dir))
+        return clips
+
     prepared = images.prepare(
         photo_paths, os.path.join(work_dir, "frames"), preset.size,
         fill=args.fill, max_crop=args.max_crop, anchor=args.crop_anchor,
         pad_color=args.pad_color, supersample=args.supersample,
     )
-    height = preset.height
     frames = round(preset.seconds * preset.fps)
-    hold = frames / preset.fps
     moves = motion.plan(len(prepared), args.seed)
-    caption_size = round(height * preset.caption_size)
-    caption_y = round(height * preset.caption_y)
 
-    clips: list[graph.Clip] = []
-    for index, item in enumerate(prepared):
-        clip = graph.Clip(image=item.path, frames=frames, move=moves[index])
+    clips = [
+        graph.Clip(source=item.path, frames=frames, move=moves[index])
+        for index, item in enumerate(prepared)
+    ]
+    _add_text(args, preset, clips, caption_lines)
 
-        caption = caption_lines[index]
+    if args.end_card:
+        clips.append(_end_card_clip(args, preset, work_dir))
+    return clips
+
+
+def _add_text(args, preset, clips: list[graph.Clip], caption_lines) -> None:
+    """Hang captions, and the opening title, on the photo clips."""
+    caption_size = round(preset.height * preset.caption_size)
+    caption_y = round(preset.height * preset.caption_y)
+
+    for index, clip in enumerate(clips):
+        hold = clip.seconds(preset.fps)
+        caption = caption_lines[index] if index < len(caption_lines) else None
         if caption:
-            clip.texts.append(text.TextSpec(
+            spec = text.TextSpec(
                 text=caption,
                 font=captions_mod.pick_font(caption, args.font),
                 size=caption_size,
@@ -152,16 +219,12 @@ def build_clips(args, preset, work_dir, photo_paths, caption_lines) -> list[grap
                 fade_out_at=max(hold - 0.35, 1.0),
                 tracking=0.03,
                 line_spacing=round(caption_size * 0.35),
-            ))
-            text.layout(clip.texts[-1], preset.width * 0.84)
+            )
+            text.layout(spec, preset.width * 0.84)
+            clip.texts.append(spec)
 
         if index == 0 and args.title:
             clip.texts.extend(_title_specs(args, preset, hold))
-        clips.append(clip)
-
-    if args.end_card:
-        clips.append(_end_card_clip(args, preset, work_dir))
-    return clips
 
 
 def _title_specs(args, preset, hold: float) -> list[text.TextSpec]:
@@ -242,7 +305,7 @@ def _end_card_clip(args, preset, work_dir) -> graph.Clip:
         _center_stack(specs, [round(specs[0].size * 0.9)], preset.height)
 
     return graph.Clip(
-        image=background,
+        source=background,
         frames=round(hold * preset.fps),
         move="still",
         texts=specs,

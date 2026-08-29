@@ -29,10 +29,12 @@ GRADES: dict[str, str] = {
 
 @dataclass
 class Clip:
-    image: str
+    # A prepared still, or a video clip when `is_video` is set.
+    source: str
     frames: int
     move: str
     texts: list[text.TextSpec] = field(default_factory=list)
+    is_video: bool = False
 
     def seconds(self, fps: int) -> float:
         return self.frames / fps
@@ -92,9 +94,15 @@ def build(
 
     inputs = _Inputs()
     # The still-image demuxer reports no frame rate, which xfade refuses;
-    # declaring one on the input and again after zoompan keeps the links constant.
+    # declaring one on the input and again after zoompan keeps the links
+    # constant. Video clips are cut to length at the demuxer instead.
     clip_indexes = [
-        inputs.add(clip.image, before=["-framerate", str(fps)]) for clip in clips
+        inputs.add(
+            clip.source,
+            before=(["-t", f"{clip.seconds(fps):.3f}"] if clip.is_video
+                    else ["-framerate", str(fps)]),
+        )
+        for clip in clips
     ]
     scrim_index = inputs.add(scrim_path) if scrim_path else None
 
@@ -122,12 +130,22 @@ def build(
         chains.append(f"[{scrim_index}:v]split={len(clips)}{outs}")
 
     for number, clip in enumerate(clips):
-        z, x, y = motion.expressions(clip.move, clip.frames, preset.zoom)
-        node = (
-            f"[{clip_indexes[number]}:v]zoompan=z='{z}':x='{x}':y='{y}'"
-            f":d={clip.frames}:s={width}x{height}:fps={fps}"
-            f",fps={fps},setsar=1,format=yuv420p,setpts=PTS-STARTPTS"
-        )
+        if clip.is_video:
+            # A generated clip already moves; it only needs to be fitted to the
+            # frame and given the same constant rate as everything else.
+            node = (
+                f"[{clip_indexes[number]}:v]"
+                f"scale={width}:{height}:force_original_aspect_ratio=increase"
+                f",crop={width}:{height}"
+                f",fps={fps},setsar=1,format=yuv420p,setpts=PTS-STARTPTS"
+            )
+        else:
+            z, x, y = motion.expressions(clip.move, clip.frames, preset.zoom)
+            node = (
+                f"[{clip_indexes[number]}:v]zoompan=z='{z}':x='{x}':y='{y}'"
+                f":d={clip.frames}:s={width}x{height}:fps={fps}"
+                f",fps={fps},setsar=1,format=yuv420p,setpts=PTS-STARTPTS"
+            )
 
         # Everything that sits on top of this photo, back to front.
         layers: list[str] = []

@@ -1,3 +1,8 @@
 __pycache__/
 *.pyc
 *.mp4
+
+# Higgsfield skills, vendored by `npx skills add higgsfield-ai/skills`.
+# skills-lock.json is tracked, so the install is reproducible.
+.agents/
+.claude/skills/
