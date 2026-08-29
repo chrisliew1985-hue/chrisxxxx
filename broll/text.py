@@ -16,16 +16,20 @@ class TextSpec:
     text: str
     font: str
     size: int
-    # Pixel offset of the block's top edge, or "center" to centre it vertically.
+    # Pixel offset, read according to `anchor`, or "center" to centre vertically.
     y: int | str
     fade_in_at: float
     fade_out_at: float
     fade: float = 0.45
+    # Which edge of the text block `y` refers to: "top" or "bottom".
+    anchor: str = "top"
     color: tuple[int, int, int] = (255, 255, 255)
     # Letter spacing as a fraction of the font size, so it survives resizing.
     tracking: float = 0.0
     line_spacing: int = 0
     shadow: float = 0.55
+    # Darkens the whole frame behind this block, fading in and out with it.
+    wash: float = 0.0
 
 
 def _load(spec: TextSpec) -> ImageFont.FreeTypeFont:
@@ -117,9 +121,16 @@ def render(spec: TextSpec, size: tuple[int, int], out_path: str) -> str:
     """Draw one text block onto a transparent layer the size of the frame."""
     font = _load(spec)
     _, block_height = measure(spec)
-    top = (size[1] - block_height) // 2 if spec.y == "center" else int(spec.y)
+    if spec.y == "center":
+        top = (size[1] - block_height) // 2
+    elif spec.anchor == "bottom":
+        # Anchoring the block's bottom keeps the margin steady however many
+        # lines a caption wrapped onto.
+        top = int(spec.y) - block_height
+    else:
+        top = int(spec.y)
 
-    layer = Image.new("RGBA", size, (0, 0, 0, 0))
+    layer = Image.new("RGBA", size, (0, 0, 0, round(255 * spec.wash)))
     if spec.shadow > 0:
         # A blurred copy behind the type keeps captions legible over bright walls.
         shade = Image.new("RGBA", size, (0, 0, 0, 0))
@@ -133,15 +144,16 @@ def render(spec: TextSpec, size: tuple[int, int], out_path: str) -> str:
     return out_path
 
 
-def scrim(out_path: str, size: tuple[int, int], height: float = 0.34, strength: float = 0.52) -> str:
+def scrim(out_path: str, size: tuple[int, int], height: float = 0.38, strength: float = 0.62) -> str:
     """A soft bottom-up darkening overlay, so captions read over bright rooms."""
     width, full_height = size
     band = max(int(full_height * height), 1)
     column = Image.new("RGBA", (1, full_height), (0, 0, 0, 0))
     pixels = column.load()
     for offset in range(band):
-        # Square-root falloff hides the top edge of the gradient.
-        ratio = (offset / band) ** 0.5
+        # offset 0 is the bottom row: darkest there, easing to nothing at the
+        # top of the band. The exponent keeps that top edge from showing.
+        ratio = (1 - offset / band) ** 2.2
         pixels[0, full_height - 1 - offset] = (0, 0, 0, round(255 * strength * ratio))
     column.resize((width, full_height), Image.BILINEAR).save(out_path)
     return out_path

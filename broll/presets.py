@@ -17,7 +17,8 @@ class Preset:
     zoom: float = 0.12
     # Caption geometry, as a fraction of the output height.
     caption_size: float = 0.030
-    caption_y: float = 0.795
+    # Where the bottom of the caption block sits, as a fraction of the height.
+    caption_y: float = 0.900
     title_size: float = 0.055
     end_card_size: float = 0.042
 
@@ -31,23 +32,23 @@ PRESETS: dict[str, Preset] = {
     "horizontal": Preset(
         "horizontal", 1920, 1080,
         seconds=3.8, transition=0.85, zoom=0.11,
-        caption_size=0.042, caption_y=0.775, title_size=0.075, end_card_size=0.058,
+        caption_size=0.042, caption_y=0.885, title_size=0.075, end_card_size=0.058,
     ),
     "square": Preset(
         "square", 1080, 1080,
         seconds=3.2, transition=0.7, zoom=0.13,
-        caption_size=0.040, caption_y=0.780, title_size=0.070, end_card_size=0.055,
+        caption_size=0.040, caption_y=0.890, title_size=0.070, end_card_size=0.055,
     ),
     # Property walkthroughs breathe more: longer holds, gentler moves, longer dissolves.
     "property": Preset(
         "property", 1080, 1920,
         seconds=4.2, transition=0.95, zoom=0.09,
-        caption_size=0.029, caption_y=0.800, title_size=0.052, end_card_size=0.040,
+        caption_size=0.029, caption_y=0.900, title_size=0.052, end_card_size=0.040,
     ),
     "property-wide": Preset(
         "property-wide", 1920, 1080,
         seconds=4.6, transition=1.05, zoom=0.08,
-        caption_size=0.041, caption_y=0.780, title_size=0.072, end_card_size=0.056,
+        caption_size=0.041, caption_y=0.885, title_size=0.072, end_card_size=0.056,
     ),
 }
 

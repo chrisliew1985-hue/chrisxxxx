@@ -147,6 +147,7 @@ def build_clips(args, preset, work_dir, photo_paths, caption_lines) -> list[grap
                 font=captions_mod.pick_font(caption, args.font),
                 size=caption_size,
                 y=caption_y,
+                anchor="bottom",
                 fade_in_at=0.5,
                 fade_out_at=max(hold - 0.35, 1.0),
                 tracking=0.03,
@@ -178,6 +179,7 @@ def _title_specs(args, preset, hold: float) -> list[text.TextSpec]:
         fade_out_at=max(hold - 0.3, 1.6),
         fade=0.8,
         tracking=0.10,
+        wash=0.30,
         line_spacing=round(title_size * 0.25),
     )]
     if subtitle:

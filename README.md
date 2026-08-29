@@ -81,7 +81,9 @@ right way up.
 that photo clean — or a `.json` list, or a `.json` object keyed by file name.
 
 Long lines wrap on `·` first, then spaces, then characters (which is what
-Chinese needs), and shrink only if wrapping is not enough. A font that can
+Chinese needs), and shrink only if wrapping is not enough. One short line
+reads best — a wrapped caption can reach up into the photo once a move zooms
+in on it. A font that can
 render the text is picked automatically; override with `--font`.
 
 Captions sit over a soft gradient that darkens the bottom of frame; turn it
@@ -100,6 +102,10 @@ warm highlights, a vignette, light sharpening and a whisper of grain.
 `clean` and `warm` are lighter touches; `none` leaves the photos alone.
 
 ## Rendering
+
+Photos are rendered at twice the output size so the Ken Burns crop lands on
+a fine enough pixel grid not to judder; `--supersample 3` smooths very slow
+pans further, at a real cost in render time.
 
 `--preview` renders fast and rough for checking timing. Drop it for the
 final file (CRF 18, x264 `slow`). `--dry-run` prints the ffmpeg command

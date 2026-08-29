@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageOps
 
 # Photos are rendered at a multiple of the output size so that zoompan, which
-# crops on the integer pixel grid of its input, does not visibly judder.
-SUPERSAMPLE = 3
+# crops on the integer pixel grid of its input, does not visibly judder. 2x is
+# enough for photos; raise it for very slow pans over very large originals.
+SUPERSAMPLE = 2
 
 FILL_MODES = ("auto", "crop", "blur", "pad")
 ANCHORS = {"center": 0.5, "top": 0.0, "bottom": 1.0}
@@ -69,7 +70,7 @@ def _backdrop(img: Image.Image, target: tuple[int, int], solid: str | None) -> I
     blurred = _crop_to_cover(img, small, 0.5).filter(
         ImageFilter.GaussianBlur(radius=max(small[0] // 22, 4))
     )
-    return ImageEnhance.Brightness(blurred).enhance(0.62)
+    return ImageEnhance.Brightness(blurred).enhance(0.50)
 
 
 def _drop_shadow(frame: Image.Image, box: tuple[int, int, int, int]) -> None:
