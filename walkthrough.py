@@ -131,6 +131,7 @@ class Shot:
     move: str
     caption: str = ""
     zoom: float = 1.16
+    fit: str = ""  # overrides the plan-wide fit; floorplans want "blur"
 
 
 @dataclass
@@ -148,6 +149,15 @@ class Plan:
     subtitle: str = ""
     end_card: str = ""
     accent: str = "#E8C37A"
+    fit: str = "cover"
+    max_crop: float = 0.38
+    spec_at: int = 0
+    spec_rows: list[tuple[str, str]] = field(default_factory=list)
+    spec_note: str = ""
+    agent_photo: Path | None = None
+    agent_name: str = ""
+    agent_tag: str = ""
+    agent_phone: str = ""
     music: Path | None = None
     music_gain: float = 0.0
     fonts: dict = field(default_factory=dict)
@@ -244,18 +254,59 @@ def collect_photos(inputs: list[str]) -> list[Path]:
     return paths
 
 
-def prepare_photo(src: Path, dst: Path, width: int, height: int, oversample: float) -> None:
-    """Cover-fit to the output aspect and upsample.
+def prepare_photo(
+    src: Path, dst: Path, width: int, height: int, oversample: float,
+    fit: str = "cover", max_crop: float = 0.38,
+) -> None:
+    """Compose one photo to the output aspect and upsample.
 
     zoompan truncates its crop offsets to whole input pixels, so feeding it an
     oversampled frame is what keeps the move smooth instead of stepping.
+
+    fit="cover" crops to fill. That is right for a 16:9 cut, but taking a 9:16
+    slice out of a 4:3 room photo throws away most of the room. fit="blur"
+    keeps the whole photo and fills the gap with a blurred, darkened copy of
+    itself; fit="smart" is the middle ground and usually the one you want for
+    vertical — it crops up to max_crop of the long edge, so the photo fills
+    most of the frame without the room being cut in half.
     """
     with Image.open(src) as im:
         im = ImageOps.exif_transpose(im).convert("RGB")
         tw = min(int(width * oversample), 6000)
         th = max(2, round(tw * height / width))
-        out = ImageOps.fit(im, (tw, th), method=Image.LANCZOS, centering=(0.5, 0.45))
-        # Even dimensions keep libx264 happy downstream.
+
+        if fit == "smart":
+            # Crop part of the way towards the frame aspect, not all of it.
+            frame_a = width / height
+            src_a = im.width / im.height
+            if src_a > frame_a:
+                target_a = max(frame_a, src_a * (1 - max_crop))
+            else:
+                target_a = min(frame_a, src_a / (1 - max_crop))
+            if target_a >= src_a:
+                cw, ch = im.width, max(2, round(im.width / target_a))
+            else:
+                cw, ch = max(2, round(im.height * target_a)), im.height
+            im = ImageOps.fit(im, (cw, ch), Image.LANCZOS, centering=(0.5, 0.45))
+
+        if fit in ("blur", "smart"):
+            # Blur a small copy and scale it up: same look, far less work.
+            small = ImageOps.fit(im, (max(1, tw // 6), max(1, th // 6)), Image.LANCZOS)
+            bg = small.filter(ImageFilter.GaussianBlur(small.width / 22)).resize(
+                (tw, th), Image.LANCZOS
+            )
+            bg = Image.blend(bg, Image.new("RGB", (tw, th), (16, 16, 18)), 0.32)
+
+            scale = min(tw * 0.98 / im.width, th * 0.92 / im.height)
+            fg = im.resize(
+                (max(2, int(im.width * scale)), max(2, int(im.height * scale))), Image.LANCZOS
+            )
+            # Sit the photo slightly high; captions live along the bottom.
+            out = bg
+            out.paste(fg, ((tw - fg.width) // 2, int((th - fg.height) * 0.42)))
+        else:
+            out = ImageOps.fit(im, (tw, th), method=Image.LANCZOS, centering=(0.5, 0.45))
+
         if out.width % 2 or out.height % 2:
             out = out.crop((0, 0, out.width - out.width % 2, out.height - out.height % 2))
         out.save(dst, "PNG", compress_level=1)
@@ -433,6 +484,120 @@ def make_end_card(plan: Plan) -> Image.Image:
     return card
 
 
+def make_spec_card(plan: Plan) -> Image.Image:
+    """A panel of hard numbers — the part a buyer screenshots."""
+    w, h = plan.width, plan.height
+    card = Image.new("RGBA", (w, h), (0, 0, 0, 96))
+    d = ImageDraw.Draw(card)
+    unit = min(w, h) / 1000
+    accent = hex_rgb(plan.accent)
+
+    pad = int(46 * unit)
+    row_h = int(62 * unit)
+    panel_w = int(w * 0.84)
+    head_h = int(78 * unit)
+    note_h = int(58 * unit) if plan.spec_note else 0
+    panel_h = head_h + row_h * len(plan.spec_rows) + pad + note_h
+    x0 = (w - panel_w) // 2
+    y0 = (h - panel_h) // 2
+
+    d.rounded_rectangle([x0, y0, x0 + panel_w, y0 + panel_h],
+                        radius=int(18 * unit), fill=(14, 14, 16, 208))
+    d.rectangle([x0, y0, x0 + panel_w, y0 + max(3, int(4 * unit))], fill=accent + (255,))
+
+    f_lab, _ = fit_font(d, "regular", "M", 25 * unit, panel_w * 0.45)
+    y = y0 + head_h - int(24 * unit)
+    for label, value in plan.spec_rows:
+        fl, _ = fit_font(d, "regular", label, 25 * unit, panel_w * 0.44)
+        fv, _ = fit_font(d, "bold", value, 29 * unit, panel_w * 0.50)
+        d.text((x0 + pad, y + int(3 * unit)), label, font=fl, fill=(186, 184, 178, 235))
+        vw = text_width(d, value, fv)
+        d.text((x0 + panel_w - pad - vw, y), value, font=fv, fill=(255, 255, 255, 245))
+        y += row_h
+        if (label, value) != plan.spec_rows[-1]:
+            d.rectangle([x0 + pad, y - int(14 * unit), x0 + panel_w - pad,
+                         y - int(14 * unit) + 1], fill=(255, 255, 255, 30))
+
+    if plan.spec_note:
+        fn, tr = fit_font(d, "bold", plan.spec_note, 34 * unit, panel_w - pad * 2, 0.0)
+        tracked_text(d, (w / 2, y + int(8 * unit)), plan.spec_note, fn,
+                     accent + (255,), tr, anchor_center=True)
+    return card
+
+
+def circular(im: Image.Image, size: int, ring: tuple, ring_w: int) -> Image.Image:
+    """Square-crop a portrait into a ringed circle."""
+    src = ImageOps.fit(im.convert("RGB"), (size, size), Image.LANCZOS, centering=(0.5, 0.42))
+    out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    mask = Image.new("L", (size * 4, size * 4), 0)
+    ImageDraw.Draw(mask).ellipse([0, 0, size * 4 - 1, size * 4 - 1], fill=255)
+    out.paste(src, (0, 0), mask.resize((size, size), Image.LANCZOS))
+    d = ImageDraw.Draw(out)
+    half = ring_w / 2
+    d.ellipse([half, half, size - 1 - half, size - 1 - half], outline=ring + (255,), width=ring_w)
+    return out
+
+
+def make_agent_card(plan: Plan) -> Image.Image:
+    """Closing call to action: hook, face, name, number — in that reading order.
+
+    The face carries it. A buyer saves a person, not a phone number.
+    """
+    w, h = plan.width, plan.height
+    card = Image.new("RGBA", (w, h), (10, 10, 12, 214))
+    d = ImageDraw.Draw(card)
+    unit = min(w, h) / 1000
+    accent = hex_rgb(plan.accent)
+    max_w = w * 0.86
+
+    lines = [ln for ln in plan.end_card.split("|") if ln.strip()] if plan.end_card else []
+    avatar = int(min(w * 0.46, h * 0.28))
+
+    # Lay the card out as a measured stack, then draw it centred as a block.
+    stack: list[tuple] = []
+    if lines:
+        f, tr = fit_font(d, "bold", lines[0], 46 * unit, max_w,
+                         0.0 if has_cjk(lines[0]) else 0.04)
+        stack.append(("text", lines[0], f, tr, (255, 255, 255, 250), f.size * 1.7))
+    stack.append(("avatar", None, None, 0, None, avatar + 30 * unit))
+    if plan.agent_name:
+        f, tr = fit_font(d, "bold", plan.agent_name, 34 * unit, max_w,
+                         0.0 if has_cjk(plan.agent_name) else 0.05)
+        stack.append(("text", plan.agent_name, f, tr, (255, 255, 255, 250), f.size * 1.35))
+    if plan.agent_tag:
+        f, tr = fit_font(d, "regular", plan.agent_tag, 23 * unit, max_w, 0.04)
+        stack.append(("text", plan.agent_tag, f, tr, (188, 186, 180, 225), f.size * 1.9))
+    for line in lines[1:]:
+        f, tr = fit_font(d, "regular", line, 26 * unit, max_w, 0.03)
+        stack.append(("text", line, f, tr, (226, 224, 218, 230), f.size * 1.6))
+    if plan.agent_phone:
+        f, tr = fit_font(d, "bold", plan.agent_phone, 32 * unit, max_w * 0.8, 0.03)
+        stack.append(("pill", plan.agent_phone, f, tr, None, f.size + 52 * unit))
+
+    y = (h - sum(item[5] for item in stack)) / 2
+    for kind, text, font, tracking, colour, advance in stack:
+        if kind == "avatar":
+            if plan.agent_photo and plan.agent_photo.exists():
+                with Image.open(plan.agent_photo) as portrait:
+                    card.alpha_composite(
+                        circular(portrait, avatar, accent, max(3, int(5 * unit))),
+                        ((w - avatar) // 2, int(y)),
+                    )
+        elif kind == "pill":
+            pw = text_width(d, text, font, tracking)
+            px, py = int(22 * unit), int(16 * unit)
+            d.rounded_rectangle(
+                [w / 2 - pw / 2 - px, y, w / 2 + pw / 2 + px, y + font.size + py * 2],
+                radius=int((font.size + py * 2) / 2), fill=accent + (255,),
+            )
+            tracked_text(d, (w / 2, y + py), text, font, (18, 16, 14, 255), tracking,
+                         anchor_center=True)
+        else:
+            tracked_text(d, (w / 2, y), text, font, colour, tracking, anchor_center=True)
+        y += advance
+    return card
+
+
 # --------------------------------------------------------------------------
 # Rendering
 # --------------------------------------------------------------------------
@@ -440,7 +605,9 @@ def make_end_card(plan: Plan) -> Image.Image:
 
 def render_shot(ff: str, shot: Shot, plan: Plan, work: Path, idx: int, verbose: bool) -> Path:
     prepped = work / f"src_{idx:03d}.png"
-    prepare_photo(shot.path, prepped, plan.width, plan.height, oversample=3.0)
+    prepare_photo(shot.path, prepped, plan.width, plan.height,
+                  oversample=2.5 if (shot.fit or plan.fit) != "cover" else 3.0,
+                  fit=shot.fit or plan.fit, max_crop=plan.max_crop)
 
     frames = max(2, int(round(shot.duration * plan.fps)))
     z, x, y = zoompan_expr(shot.move, frames, shot.zoom)
@@ -471,48 +638,83 @@ def render_shot(ff: str, shot: Shot, plan: Plan, work: Path, idx: int, verbose: 
     return out
 
 
+def free_slot(window: tuple[float, float], reserved: list[tuple[float, float]],
+              gap: float = 0.35) -> tuple[float, float] | None:
+    """Largest sub-window of `window` not colliding with anything reserved."""
+    start, end = window
+    best: tuple[float, float] | None = None
+    edges = [start] + [b + gap for _, b in reserved] 
+    for s0 in edges:
+        if s0 >= end:
+            continue
+        e0 = end
+        for a, b in reserved:
+            if a - gap > s0:
+                e0 = min(e0, a - gap)
+        if e0 > s0 and (best is None or e0 - s0 > best[1] - best[0]):
+            best = (s0, e0)
+    return best
+
+
 def build_overlays(plan: Plan, work: Path) -> list[tuple[Path, float, float]]:
     """Text overlays as (png, start, end) on the final timeline.
 
     Cards are scheduled so they never stack: the title owns the head of the
-    film, the end card owns the tail, and captions take what is left of their
-    own shot. Two scrims on screen at once reads as a smudge, not a title.
+    film, the spec panel and closing card claim their own windows, and captions
+    take whatever is left of their own shot. Two scrims on screen at once reads
+    as a smudge, not a title.
     """
     items: list[tuple[Path, float, float]] = []
+    reserved: list[tuple[float, float]] = []
     total = plan.total
-    first, last = plan.shots[0], plan.shots[-1]
     tail = plan.transition  # a caption should clear its own outgoing transition
 
-    title_end = 0.0
-    if plan.title:
-        title_end = min(0.6 + 4.0, max(2.2, first.duration - tail * 0.5))
-        p = work / "card_title.png"
-        make_title_card(plan).save(p)
-        items.append((p, 0.6, title_end))
-
-    end_start = total
-    if plan.end_card:
-        end_start = max(title_end + 0.4, total - min(3.2, last.duration - tail - 0.2))
-        p = work / "card_end.png"
-        make_end_card(plan).save(p)
-        items.append((p, end_start, total))
-
-    clock = 0.0
+    # Where each shot starts on the assembled timeline.
+    starts, clock = [], 0.0
     for i, shot in enumerate(plan.shots):
-        shot_start = clock
+        starts.append(clock)
         clock += shot.duration - (tail if i < len(plan.shots) - 1 else 0)
+
+    if plan.title:
+        end = min(0.6 + 4.0, max(2.2, plan.shots[0].duration - tail * 0.5))
+        path = work / "card_title.png"
+        make_title_card(plan).save(path)
+        items.append((path, 0.6, end))
+        reserved.append((0.6, end))
+
+    if plan.spec_rows and len(plan.shots) > 1:
+        i = (plan.spec_at - 1) if plan.spec_at else (1 if len(plan.shots) < 4 else 2)
+        i = max(0, min(i, len(plan.shots) - 1))
+        start = starts[i] + 0.35
+        end = min(start + 4.2, starts[i] + plan.shots[i].duration - tail - 0.25)
+        if end - start >= 1.5:
+            path = work / "card_spec.png"
+            make_spec_card(plan).save(path)
+            items.append((path, start, end))
+            reserved.append((start, end))
+
+    closing = bool(plan.agent_photo or plan.agent_name or plan.agent_phone or plan.end_card)
+    if closing:
+        last = plan.shots[-1]
+        span = min(4.0 if plan.agent_photo else 3.2, last.duration - tail - 0.2)
+        start = max((reserved[-1][1] + 0.4) if reserved else 0.0, total - span)
+        path = work / "card_close.png"
+        card = make_agent_card(plan) if (plan.agent_photo or plan.agent_phone) else make_end_card(plan)
+        card.save(path)
+        items.append((path, start, total))
+        reserved.append((start, total))
+
+    reserved.sort()
+    for i, shot in enumerate(plan.shots):
         if not shot.caption:
             continue
-        start = shot_start + 0.45
-        end = shot_start + shot.duration - tail - 0.25
-        # Yield to the title and end cards rather than overlapping them.
-        start = max(start, title_end + 0.35) if title_end else start
-        end = min(end, end_start - 0.35) if plan.end_card else end
-        if end - start < 1.0:
+        window = (starts[i] + 0.45, starts[i] + shot.duration - tail - 0.25)
+        slot = free_slot(window, reserved)
+        if slot is None or slot[1] - slot[0] < 1.0:
             continue
-        p = work / f"card_cap_{i:03d}.png"
-        make_caption_card(plan, shot.caption).save(p)
-        items.append((p, start, end))
+        path = work / f"card_cap_{i:03d}.png"
+        make_caption_card(plan, shot.caption).save(path)
+        items.append((path, slot[0], slot[1]))
 
     items.sort(key=lambda it: it[1])
     return items
@@ -631,11 +833,13 @@ def build_plan(args) -> Plan:
         captions = [e.get("caption", "") for e in entries]
         durations = [float(e.get("duration", args.duration)) for e in entries]
         moves = [e.get("move") for e in entries]
+        fits = [e.get("fit", "") for e in entries]
     else:
         paths = collect_photos(args.photos)
         captions = [""] * len(paths)
         durations = [args.duration] * len(paths)
         moves = [None] * len(paths)
+        fits = [""] * len(paths)
         if args.captions:
             lines = Path(args.captions).read_text().splitlines()
             for i, line in enumerate(lines[: len(paths)]):
@@ -643,9 +847,16 @@ def build_plan(args) -> Plan:
 
     auto = pick_moves(len(paths), args.seed)
     shots = [
-        Shot(path=p, duration=d, move=(m or auto[i]), caption=c, zoom=args.zoom)
-        for i, (p, d, m, c) in enumerate(zip(paths, durations, moves, captions))
+        Shot(path=p, duration=d, move=(m or auto[i]), caption=c, zoom=args.zoom, fit=f)
+        for i, (p, d, m, c, f) in enumerate(zip(paths, durations, moves, captions, fits))
     ]
+
+    spec_rows: list[tuple[str, str]] = []
+    if args.spec:
+        for chunk in args.spec.split("|"):
+            if "=" in chunk:
+                label, value = chunk.split("=", 1)
+                spec_rows.append((label.strip(), value.strip()))
 
     kinds = TRANSITIONS[args.transition]
     return Plan(
@@ -662,6 +873,15 @@ def build_plan(args) -> Plan:
         subtitle=args.subtitle or "",
         end_card=args.end_card or "",
         accent=args.accent,
+        fit=args.fit,
+        max_crop=args.max_crop,
+        spec_at=args.spec_at,
+        spec_rows=spec_rows,
+        spec_note=args.spec_note or "",
+        agent_photo=Path(args.agent_photo) if args.agent_photo else None,
+        agent_name=args.agent_name or "",
+        agent_tag=args.agent_tag or "",
+        agent_phone=args.agent_phone or "",
         music=Path(args.music) if args.music else None,
         music_gain=args.music_gain,
     )
@@ -693,6 +913,21 @@ def parse_args(argv=None):
     p.add_argument("--subtitle")
     p.add_argument("--end-card", help="closing text; use | to split lines")
     p.add_argument("--accent", default="#E8C37A", help="accent colour for rules and bars")
+    p.add_argument("--fit", default="cover", choices=["cover", "smart", "blur"],
+                   help="cover crops to fill; blur keeps the whole photo on a blurred "
+                        "backdrop; smart crops part way, best for vertical")
+    p.add_argument("--max-crop", type=float, default=0.38,
+                   help="with --fit smart, most of the long edge it may crop away")
+
+    p.add_argument("--spec", help="spec panel rows: \"Land=35' x 80'|Built-up=3,144 sqft\"")
+    p.add_argument("--spec-note", help="headline under the spec rows, e.g. the price")
+    p.add_argument("--spec-at", type=int, default=0,
+                   help="which shot number the spec panel sits on (default: shot 3)")
+
+    p.add_argument("--agent-photo", help="agent portrait for the closing card")
+    p.add_argument("--agent-name")
+    p.add_argument("--agent-tag", help="agency / licence line")
+    p.add_argument("--agent-phone", help="shown in an accent pill")
 
     p.add_argument("--music", help="audio file; looped and faded to fit")
     p.add_argument("--music-gain", type=float, default=-3.0, help="dB applied to the music")

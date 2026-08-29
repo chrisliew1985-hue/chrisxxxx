@@ -1,0 +1,16 @@
+{
+  "_comment": "The Woodlands @ Horizon Hills (CL8656). AIDA order: the facade hooks, the spec panel and floorplans build interest, the walk builds desire, the closing card asks for the action. Floorplans use fit=blur so nothing gets cropped off them.",
+  "shots": [
+    { "photo": "../assets/woodlands/01_facade.jpg",          "caption": "",                        "duration": 3.6, "move": "push_in" },
+    { "photo": "../assets/woodlands/02_living_open.jpg",     "caption": "",                        "duration": 4.4, "move": "push_in_left" },
+    { "photo": "../assets/woodlands/10a_plan_ground.jpg",    "caption": "楼下 · 客房自带浴室",       "duration": 3.6, "move": "push_in",       "fit": "blur" },
+    { "photo": "../assets/woodlands/10b_plan_first.jpg",     "caption": "楼上 · 3 房 + 家庭厅 + 书房", "duration": 3.6, "move": "push_in",       "fit": "blur" },
+    { "photo": "../assets/woodlands/03_garden_doors.jpg",    "caption": "落地玻璃门 · 直通花园",     "duration": 3.0, "move": "pan_right" },
+    { "photo": "../assets/woodlands/05_yard.jpg",            "caption": "湿厨房后院 · 独立铁门",     "duration": 2.8, "move": "push_in" },
+    { "photo": "../assets/woodlands/06_landing.jpg",         "caption": "楼上走廊 · 玻璃扶手",       "duration": 2.8, "move": "pan_left" },
+    { "photo": "../assets/woodlands/07_bedroom.jpg",         "caption": "睡房方正 · 大窗采光",       "duration": 2.8, "move": "tilt_down" },
+    { "photo": "../assets/woodlands/08_bedroom_balcony.jpg", "caption": "睡房连私人阳台",           "duration": 2.8, "move": "push_in_right" },
+    { "photo": "../assets/woodlands/09_bathroom.jpg",        "caption": "浴室干湿分离 · 双洗手盆",   "duration": 2.8, "move": "pan_right" },
+    { "photo": "../assets/woodlands/04_high_ceiling.jpg",    "caption": "",                        "duration": 5.0, "move": "pull_out" }
+  ]
+}
