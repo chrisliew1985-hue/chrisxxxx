@@ -120,8 +120,11 @@ def encoder(path: str, width: int, height: int, fps: float,
            "-f", "rawvideo", "-pix_fmt", "bgr24",
            "-s", f"{width}x{height}", "-r", f"{fps}", "-i", "-"]
     if audio_from:
+        # No -shortest here: the audio track can be a hair shorter than the
+        # video, and -shortest would close the frame pipe before the last
+        # frames are in.
         cmd += ["-i", audio_from, "-map", "0:v:0", "-map", "1:a:0",
-                "-c:a", "aac", "-b:a", "160k", "-shortest"]
+                "-c:a", "aac", "-b:a", "160k"]
     cmd += ["-c:v", "libx264", "-preset", preset, "-crf", str(crf),
             "-pix_fmt", "yuv420p", "-movflags", "+faststart", path]
     return subprocess.Popen(cmd, stdin=subprocess.PIPE)
@@ -208,6 +211,17 @@ def anaglyph(left: np.ndarray, right: np.ndarray) -> np.ndarray:
     return np.clip(np.stack([out_b, out_g, out_r], axis=-1), 0, 255).astype(np.uint8)
 
 
+def write_frame(writers: dict, dead: set, key: str, data: bytes) -> None:
+    """Feed one raw frame to an encoder, tolerating one that has died."""
+    if key not in writers or key in dead:
+        return
+    try:
+        writers[key].stdin.write(data)
+    except (BrokenPipeError, ValueError):
+        dead.add(key)
+        print(f"warning: encoder for {key} closed early", file=sys.stderr)
+
+
 def restore_canvas(img: np.ndarray, canvas: tuple[int, int],
                    crop: tuple[int, int, int, int]) -> np.ndarray:
     """Paste a cropped frame back onto the original (letterboxed) canvas."""
@@ -216,6 +230,33 @@ def restore_canvas(img: np.ndarray, canvas: tuple[int, int],
     out = np.zeros((ch, cw, 3), dtype=img.dtype)
     out[y:y + h, x:x + w] = img
     return out
+
+
+def _infer_pass(args, session, input_name, crop, depth_mm, lo, hi,
+                total: int, w: int, h: int, frame_bytes: int) -> int:
+    """Run depth over every frame, filling depth_mm and the lo/hi level arrays."""
+    proc = decoder(args.input, crop, args.max_frames)
+    n = 0
+    t0 = time.time()
+    print(f"\npass 1/2  depth inference ({total} frames)")
+    while n < total:
+        buf = proc.stdout.read(frame_bytes)
+        if len(buf) < frame_bytes:
+            break
+        frame = np.frombuffer(buf, np.uint8).reshape(h, w, 3)
+        raw = infer_depth(session, input_name, frame)
+        full = cv2.resize(raw, (w, h), interpolation=cv2.INTER_CUBIC)
+        depth_mm[n] = full.astype(np.float16)
+        lo[n], hi[n] = np.percentile(full, (2.0, 98.0))
+        n += 1
+        if n % 25 == 0 or n == total:
+            done = time.time() - t0
+            print(f"  {n}/{total}  {done/n:.2f}s/frame  "
+                  f"eta {done/n*(total-n)/60:.1f} min", flush=True)
+    proc.terminate()
+    proc.stdout.close()
+    proc.wait()
+    return n
 
 
 # --------------------------------------------------------------------------- #
@@ -248,7 +289,11 @@ def main() -> None:
     ap.add_argument("--crf", type=int, default=18)
     ap.add_argument("--preset", default="medium")
     ap.add_argument("--no-audio", action="store_true")
-    ap.add_argument("--keep-cache", action="store_true")
+    ap.add_argument("--keep-cache", action="store_true",
+                    help="keep the depth cache so --reuse-cache can pick it up")
+    ap.add_argument("--reuse-cache", action="store_true",
+                    help="skip inference and re-render from a cache left by "
+                         "an earlier run with --keep-cache")
     args = ap.parse_args()
 
     require_tool("ffmpeg")
@@ -301,41 +346,34 @@ def main() -> None:
 
     # ---------------- pass 1: depth ---------------- #
     depth_path = os.path.join(cache_dir, "depth_f16.raw")
-    depth_mm = np.memmap(depth_path, dtype=np.float16, mode="w+", shape=(total, h, w))
-    lo = np.zeros(total, dtype=np.float32)
-    hi = np.zeros(total, dtype=np.float32)
-
-    proc = decoder(args.input, crop, args.max_frames)
+    levels_path = os.path.join(cache_dir, "levels.npy")
     frame_bytes = w * h * 3
-    n = 0
-    t0 = time.time()
-    print(f"\npass 1/2  depth inference ({total} frames)")
-    while n < total:
-        buf = proc.stdout.read(frame_bytes)
-        if len(buf) < frame_bytes:
-            break
-        frame = np.frombuffer(buf, np.uint8).reshape(h, w, 3)
-        raw = infer_depth(session, input_name, frame)
-        full = cv2.resize(raw, (w, h), interpolation=cv2.INTER_CUBIC)
-        depth_mm[n] = full.astype(np.float16)
-        lo[n], hi[n] = np.percentile(full, (2.0, 98.0))
-        n += 1
-        if n % 25 == 0 or n == total:
-            done = time.time() - t0
-            eta = done / n * (total - n)
-            print(f"  {n}/{total}  {done/n:.2f}s/frame  eta {eta/60:.1f} min",
-                  flush=True)
-    proc.terminate()
-    proc.stdout.close()
-    proc.wait()
 
-    if n == 0:
-        sys.exit("error: decoded 0 frames")
-    total = n
-    lo, hi = lo[:total], hi[:total]
-    depth_mm.flush()
-    depth_mm = np.memmap(depth_path, dtype=np.float16, mode="r",
-                         shape=(int(os.path.getsize(depth_path) / (h * w * 2)), h, w))
+    if args.reuse_cache and os.path.exists(depth_path) and os.path.exists(levels_path):
+        cached = int(os.path.getsize(depth_path) // (h * w * 2))
+        levels = np.load(levels_path)
+        total = min(total, cached, levels.shape[1])
+        depth_mm = np.memmap(depth_path, dtype=np.float16, mode="r",
+                             shape=(cached, h, w))
+        lo, hi = levels[0, :total].copy(), levels[1, :total].copy()
+        print(f"\npass 1/2  skipped, reusing cached depth ({total} frames)")
+        n = total
+    else:
+        depth_mm = np.memmap(depth_path, dtype=np.float16, mode="w+",
+                             shape=(total, h, w))
+        lo = np.zeros(total, dtype=np.float32)
+        hi = np.zeros(total, dtype=np.float32)
+        n = _infer_pass(args, session, input_name, crop, depth_mm, lo, hi,
+                        total, w, h, frame_bytes)
+        if n == 0:
+            sys.exit("error: decoded 0 frames")
+        total = n
+        lo, hi = lo[:total], hi[:total]
+        depth_mm.flush()
+        np.save(levels_path, np.stack([lo, hi]))
+        depth_mm = np.memmap(depth_path, dtype=np.float16, mode="r",
+                             shape=(int(os.path.getsize(depth_path) // (h * w * 2)),
+                                    h, w))
 
     # Smoothing the normalisation window instead of the depth itself keeps
     # detail while stopping the whole image from pulsing frame to frame.
@@ -370,6 +408,7 @@ def main() -> None:
     div_px = args.divergence / 100.0 * w
     cmap = COLORMAPS[args.colormap]
 
+    dead: set[str] = set()
     proc = decoder(args.input, crop, args.max_frames)
     t0 = time.time()
     print(f"\npass 2/2  rendering {', '.join(wanted)}")
@@ -384,22 +423,22 @@ def main() -> None:
 
         if "gray" in writers:
             img = cv2.cvtColor(gray8, cv2.COLOR_GRAY2BGR)
-            writers["gray"].stdin.write(
-                (restore_canvas(img, canvas, crop) if pad else img).tobytes())
+            write_frame(writers, dead, "gray",
+                        (restore_canvas(img, canvas, crop) if pad else img).tobytes())
         color_img = None
         if "color" in writers or "compare" in writers:
             color_img = cv2.applyColorMap(gray8, cmap)
         if "color" in writers:
-            writers["color"].stdin.write(
-                (restore_canvas(color_img, canvas, crop) if pad else color_img).tobytes())
+            write_frame(writers, dead, "color",
+                        (restore_canvas(color_img, canvas, crop) if pad
+                         else color_img).tobytes())
         if "compare" in writers:
-            writers["compare"].stdin.write(np.vstack([frame, color_img]).tobytes())
+            write_frame(writers, dead, "compare",
+                        np.vstack([frame, color_img]).tobytes())
         if "sbs" in writers or "anaglyph" in writers:
             left, right = stereo_pair(frame, norm, div_px, args.convergence)
-            if "sbs" in writers:
-                writers["sbs"].stdin.write(np.hstack([left, right]).tobytes())
-            if "anaglyph" in writers:
-                writers["anaglyph"].stdin.write(anaglyph(left, right).tobytes())
+            write_frame(writers, dead, "sbs", np.hstack([left, right]).tobytes())
+            write_frame(writers, dead, "anaglyph", anaglyph(left, right).tobytes())
 
         if (i + 1) % 100 == 0 or i + 1 == total:
             done = time.time() - t0
@@ -410,7 +449,10 @@ def main() -> None:
     proc.stdout.close()
     proc.wait()
     for key, wr in writers.items():
-        wr.stdin.close()
+        try:
+            wr.stdin.close()
+        except BrokenPipeError:
+            pass
         if wr.wait() != 0:
             print(f"warning: encoder for {key} exited non-zero", file=sys.stderr)
 
