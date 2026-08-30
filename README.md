@@ -17,6 +17,9 @@ repo stays small and ComfyUI can be updated independently.
 
 Then open <http://127.0.0.1:8188>.
 
+Budget roughly **8GB of disk** for the install (a 6GB virtualenv where the
+PyPI torch wheel is used, ~1GB otherwise), plus whatever the checkpoints take.
+
 ## Scripts
 
 | Script | Purpose |
@@ -88,3 +91,14 @@ Try `./scripts/run.sh --lowvram`, or use a smaller model and image size.
 Re-run `./scripts/setup.sh`. It fetches the latest commit and re-syncs
 dependencies into the existing venv. Pin a release with
 `COMFY_REF=v0.34.0 ./scripts/setup.sh`.
+
+## Verified
+
+Installed and booted on this configuration:
+
+- Linux x86_64, 4 cores, 15GB RAM, no GPU
+- Python 3.11.15, torch 2.13.0 (PyPI fallback wheel), ComfyUI 0.34.0
+- Server came up on CPU and served the UI with 902 node types registered
+
+Image generation itself was not exercised, because `huggingface.co` was
+blocked on that network and no checkpoint could be fetched.
