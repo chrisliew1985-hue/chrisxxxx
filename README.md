@@ -20,6 +20,30 @@ Then open <http://127.0.0.1:8188>.
 Budget roughly **8GB of disk** for the install (a 6GB virtualenv where the
 PyPI torch wheel is used, ~1GB otherwise), plus whatever the checkpoints take.
 
+## Running on Colab, with models in Google Drive
+
+If you have no local GPU, `colab/ComfyUI_Colab.ipynb` runs ComfyUI on Colab's
+GPU and keeps everything worth keeping in Google Drive. Open it in
+[Colab](https://colab.research.google.com/), set `Runtime > Change runtime type`
+to GPU, and run the cells top to bottom. The last cell prints a public URL you
+open in a new tab.
+
+ComfyUI's own code is installed to the runtime's local disk — it is thousands of
+small files and Drive's FUSE mount makes that painfully slow. Only the things
+that are expensive to re-fetch are symlinked into `MyDrive/ComfyUI`:
+
+- all 11 model folders (`checkpoints`, `loras`, `diffusion_models`,
+  `text_encoders`, `vae`, …), so multi-GB weights download once, not once per session
+- `output/`, so generated images are in Drive without exporting
+- `input/` and `workflows/`
+
+A later session skips the download entirely and is just: mount, install, launch.
+
+Two caveats. Free Colab reclaims idle runtimes and caps GPU hours, so the URL
+dies periodically — re-run the cells for a new one, nothing in Drive is lost.
+And that URL is public with no password on it, so don't share it and stop the
+last cell when you are finished.
+
 ## Scripts
 
 | Script | Purpose |
@@ -102,3 +126,9 @@ Installed and booted on this configuration:
 
 Image generation itself was not exercised, because `huggingface.co` was
 blocked on that network and no checkpoint could be fetched.
+
+The Colab notebook was **not executed** — there is no Colab runtime here. What
+was checked: it is valid nbformat, every code cell compiles, its folder-linking
+cell was run against a simulated clone (idempotent, survives a re-clone, writes
+land in Drive), all 11 linked model folders exist in ComfyUI 0.34.0, and the
+tunnel-URL regex matches real cloudflared output.
