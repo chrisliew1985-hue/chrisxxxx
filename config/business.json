@@ -1,0 +1,120 @@
+{
+  "agentName": "Chris",
+  "agency": "Your Agency Name",
+  "timezone": "Asia/Kuala_Lumpur",
+  "businessHours": {
+    "mon": "09:00-19:00",
+    "tue": "09:00-19:00",
+    "wed": "09:00-19:00",
+    "thu": "09:00-19:00",
+    "fri": "09:00-19:00",
+    "sat": "10:00-17:00",
+    "sun": null
+  },
+  "languages": ["English", "Bahasa Malaysia", "中文"],
+  "serviceAreas": ["Mont Kiara", "Bangsar", "KLCC", "Damansara Heights"],
+  "about": "Residential sales and rentals in Kuala Lumpur. Free market valuation for owners. Viewings are by appointment, usually same week. No fee charged to tenants for rentals handled directly.",
+  "alertNumber": "",
+  "signOff": "— Chris",
+  "unsupportedMediaReply": "Thanks for that! I can only read text messages here, so {{agentName}} will take a look and get back to you shortly. 🙏",
+  "handoffReply": "Let me get {{agentName}} to answer that one properly — he'll message you here shortly.",
+  "fallbackReply": "Thanks for your message! {{agentName}} will get back to you personally very soon. Our hours are {{hours}}.",
+  "listings": [
+    {
+      "ref": "MK-101",
+      "title": "Verve Suites, Mont Kiara",
+      "type": "Condominium",
+      "area": "Mont Kiara",
+      "price": "RM 780,000",
+      "beds": 2,
+      "baths": 2,
+      "sqft": 1050,
+      "tenure": "Freehold",
+      "furnishing": "Fully furnished",
+      "status": "available",
+      "highlights": [
+        "High floor, KL city view",
+        "Walking distance to Publika",
+        "Two side-by-side car parks"
+      ],
+      "notes": "Owner is flexible on completion date."
+    },
+    {
+      "ref": "BG-204",
+      "title": "Bangsar South Link",
+      "type": "Condominium",
+      "area": "Bangsar",
+      "price": "RM 3,200/month",
+      "beds": 3,
+      "baths": 2,
+      "sqft": 1200,
+      "tenure": "Leasehold",
+      "furnishing": "Partially furnished",
+      "status": "available",
+      "highlights": ["5 min to MRT", "Pool and gym", "Pet friendly"]
+    }
+  ],
+  "faq": [
+    {
+      "q": "Do you charge tenants a fee?",
+      "a": "No. For rentals handled directly, the landlord pays the agency fee."
+    },
+    {
+      "q": "How soon can I view a property?",
+      "a": "Usually within the same week, subject to the owner's availability."
+    },
+    {
+      "q": "Do you help with home loans?",
+      "a": "We can introduce you to a mortgage broker, but we do not give loan advice ourselves."
+    }
+  ],
+  "rules": [
+    {
+      "id": "greeting",
+      "keywords": ["hi", "hello", "hey", "good morning", "good afternoon", "good evening", "你好", "早安", "salam", "helo"],
+      "reply": "Hi! 👋 This is {{agentName}}'s assistant at {{agency}}. Are you looking to buy, rent, or sell? Happy to help.",
+      "afterHoursReply": "Hi! 👋 This is {{agentName}}'s assistant at {{agency}}. We're closed right now ({{hours}}) but tell me what you're looking for and {{agentName}} will follow up first thing.",
+      "priority": 0
+    },
+    {
+      "id": "opening-hours",
+      "keywords": ["opening hours", "what time", "still open", "office hours", "几点", "营业时间"],
+      "reply": "Our hours are {{hours}}. Drop your question here any time and {{agentName}} will reply as soon as he's back.",
+      "priority": 1
+    },
+    {
+      "id": "areas-covered",
+      "keywords": ["which area", "what areas", "areas do you cover", "where do you cover"],
+      "reply": "We mainly cover {{areas}}. Which one are you interested in?",
+      "priority": 1
+    },
+    {
+      "id": "book-viewing",
+      "keywords": ["book a viewing", "arrange viewing", "schedule a viewing", "can i view", "want to view", "看房", "预约看房"],
+      "reply": "Great — happy to arrange a viewing. Which property, and which days suit you best? {{agentName}} will confirm the exact slot with you.",
+      "afterHoursReply": "Great — happy to arrange a viewing. Tell me which property and which days suit you, and {{agentName}} will confirm the slot when he's back ({{hours}}).",
+      "priority": 2
+    },
+    {
+      "id": "speak-to-human",
+      "keywords": ["speak to agent", "talk to a human", "talk to someone", "real person", "call me", "phone me", "stop the bot", "找人", "打电话给我"],
+      "reply": "Of course — passing you to {{agentName}} now. He'll message you here shortly. 🙏",
+      "handoff": true,
+      "priority": 3
+    },
+    {
+      "id": "complaint",
+      "keywords": ["complaint", "complain", "unacceptable", "refund", "lawyer", "sue", "投诉"],
+      "reply": "I'm sorry about that — I'm passing this straight to {{agentName}} so he can sort it out with you personally.",
+      "handoff": true,
+      "priority": 4
+    },
+    {
+      "id": "offer-or-contract",
+      "keywords": ["make an offer", "my offer", "deposit", "booking fee", "sign the contract", "tenancy agreement", "sale and purchase", "出价", "定金"],
+      "reply": "That's one for {{agentName}} directly — I'll get him to call you so nothing gets lost in translation. 🙏",
+      "handoff": true,
+      "priority": 4
+    }
+  ]
+}
