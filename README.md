@@ -74,6 +74,9 @@ unmatched messages start going to Claude.
 `/manual <text>` pretends you just replied from your phone, so you can watch the
 bot go quiet the way it will in production.
 
+`npm run doctor` checks your config and `.env` at any point and tells you what
+is still missing.
+
 ## Make it yours
 
 Everything you'd want to change lives in **`config/business.json`**. Nothing in
@@ -162,18 +165,32 @@ What coexistence needs:
    ```
    Invent any long random string for `WHATSAPP_VERIFY_TOKEN` — you'll type the
    same value into Meta in the next step.
-6. **Expose the server.** Meta needs a public HTTPS URL. For local testing:
+6. **Check your setup.** Before going near the webhook form:
+   ```bash
+   npm run doctor              # config and .env
+   npm run doctor -- --live    # confirms the token and number with Meta
+   ```
+   It names the exact problem and the fix for each one.
+7. **Expose the server.** Meta needs a public HTTPS URL. For local testing:
    ```bash
    npm run dev
    npx ngrok http 3000     # in a second terminal
    ```
-7. **Register the webhook.** In *WhatsApp → Configuration → Webhook*, set the
+   Then test the deployment the way Meta will:
+   ```bash
+   npm run doctor -- --url https://your-ngrok-url
+   ```
+   This runs the verification handshake, a correctly signed POST, and an
+   unsigned one that must be rejected — so you know the URL works before Meta
+   tries it. It sends a delivery-status payload, so nothing is messaged to
+   anyone.
+8. **Register the webhook.** In *WhatsApp → Configuration → Webhook*, set the
    callback URL to `https://your-domain/webhook` and the verify token to the
    value from step 5, then click Verify and Save. Subscribe to **`messages`**
    and — this is the one people miss — **`smb_message_echoes`**, which is what
    tells the bot you've replied from your phone. Meta calls `GET /webhook` once
    to verify; you'll see `Webhook verified by Meta` in the logs.
-8. **Send yourself a message.** Message the number from another phone. The reply
+9. **Send yourself a message.** Message the number from another phone. The reply
    should arrive in a second or two.
 
 ### Deploying
@@ -240,6 +257,7 @@ All optional, in `.env`:
 
 ```bash
 npm run dev         # server with reload
+npm run doctor      # check config, .env, Meta connection, deployed webhook
 npm run dry-run     # chat with the bot in your terminal
 npm test            # 37 tests, no network calls
 npm run typecheck
@@ -255,6 +273,7 @@ npm run typecheck
 | `src/store.ts` | Per-contact state, de-duplication, rate limits, leads |
 | `src/hours.ts` | Business-hours logic |
 | `src/signature.ts` | Meta webhook HMAC verification |
+| `src/doctor.ts` | Setup checker (`npm run doctor`) |
 
 `decide()` in `src/brain.ts` never touches the network — it takes a message and
 returns a decision, which is why the whole reply path is testable offline.
