@@ -5,8 +5,8 @@ import { isClaudeEnabled } from "./claude.js";
 import { log, maskNumber, redactBody } from "./logger.js";
 import { verifySignature } from "./signature.js";
 import { Store } from "./store.js";
-import { markRead, parseInbound, sendText } from "./whatsapp.js";
-import type { BusinessConfig, InboundMessage } from "./types.js";
+import { markRead, parseEchoes, parseInbound, sendText } from "./whatsapp.js";
+import type { BusinessConfig, EchoMessage, InboundMessage } from "./types.js";
 
 declare module "express-serve-static-core" {
   interface Request {
@@ -59,11 +59,35 @@ app.post("/webhook", (req: Request, res: Response) => {
   // first and do the work afterwards.
   res.sendStatus(200);
 
-  const messages = parseInbound(req.body);
-  for (const message of messages) {
+  // In coexistence mode Meta also echoes what the agent typed on their phone.
+  for (const echo of parseEchoes(req.body)) {
+    handleEcho(echo);
+  }
+  for (const message of parseInbound(req.body)) {
     void handleMessage(message);
   }
 });
+
+/**
+ * The agent answered this customer by hand from the WhatsApp Business app, so
+ * the bot backs off rather than talking over them. Each manual reply extends
+ * the pause; it lapses on its own so the bot resumes without being told.
+ */
+function handleEcho(echo: EchoMessage): void {
+  // Messages the bot itself sent are already marked seen, so they never
+  // reach here and cannot make the bot pause itself.
+  if (!store.markSeen(echo.id)) return;
+
+  store.startHandoff(echo.to, env.manualReplyPauseHours);
+  if (echo.text) {
+    // Keep the manual reply in history so Claude has the thread if it resumes.
+    store.appendHistory(echo.to, "assistant", echo.text);
+  }
+  log.info("Agent replied by hand, pausing auto-replies for this chat", {
+    to: maskNumber(echo.to),
+    hours: env.manualReplyPauseHours,
+  });
+}
 
 async function handleMessage(message: InboundMessage): Promise<void> {
   if (!store.markSeen(message.id)) {
@@ -87,7 +111,10 @@ async function handleMessage(message: InboundMessage): Promise<void> {
     const result = commit({ store, message, decision });
 
     if (result.reply) {
-      await sendText(message.from, result.reply);
+      const sentId = await sendText(message.from, result.reply);
+      // Claim our own id up front: in coexistence mode this message may echo
+      // back, and we must not mistake it for the agent typing.
+      if (sentId) store.markSeen(sentId);
     } else {
       log.info("Staying silent", {
         from: maskNumber(message.from),
@@ -96,9 +123,13 @@ async function handleMessage(message: InboundMessage): Promise<void> {
     }
 
     if (result.alert && config.alertNumber) {
-      await sendText(config.alertNumber, result.alert).catch((error: Error) =>
-        log.error("Could not deliver handoff alert", { error: error.message }),
-      );
+      await sendText(config.alertNumber, result.alert)
+        .then((sentId) => {
+          if (sentId) store.markSeen(sentId);
+        })
+        .catch((error: Error) =>
+          log.error("Could not deliver handoff alert", { error: error.message }),
+        );
     }
   } catch (error) {
     log.error("Failed to handle message", {

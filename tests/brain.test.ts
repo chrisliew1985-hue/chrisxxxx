@@ -161,3 +161,20 @@ test("state survives a restart", () => {
   assert.equal(second.isHandedOff("60123456789"), true);
   assert.equal(second.markSeen("wamid.persisted"), false);
 });
+
+test("a shorter pause never cuts a longer handoff short", () => {
+  const store = freshStore();
+  const now = Date.now();
+  store.startHandoff("60123456789", 12, now);
+  store.startHandoff("60123456789", 4, now);
+  // Still paused 11 hours from now, i.e. the 12-hour handoff survived.
+  assert.equal(store.isHandedOff("60123456789", now + 11 * 60 * 60 * 1000), true);
+});
+
+test("a longer pause does extend a shorter one", () => {
+  const store = freshStore();
+  const now = Date.now();
+  store.startHandoff("60123456789", 4, now);
+  store.startHandoff("60123456789", 12, now);
+  assert.equal(store.isHandedOff("60123456789", now + 11 * 60 * 60 * 1000), true);
+});

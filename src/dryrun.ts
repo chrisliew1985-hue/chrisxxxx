@@ -12,7 +12,7 @@ import readline from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { commit, decide } from "./brain.js";
 import { isClaudeEnabled } from "./claude.js";
-import { loadBusinessConfig } from "./config.js";
+import { env, loadBusinessConfig } from "./config.js";
 import { isWithinBusinessHours } from "./hours.js";
 import { Store } from "./store.js";
 import type { InboundMessage } from "./types.js";
@@ -37,7 +37,12 @@ async function main(): Promise<void> {
         `currently ${open ? "open" : "closed"}`,
     ),
   );
-  console.log(dim("Type a customer message. /reset to start over, /quit to exit.\n"));
+  console.log(
+    dim(
+      "Type a customer message. /manual <text> pretends you replied from your\n" +
+        "phone, /reset starts over, /quit exits.\n",
+    ),
+  );
 
   // The async line iterator (rather than repeated rl.question) keeps piped
   // input working, so you can script a conversation as well as type one.
@@ -49,6 +54,19 @@ async function main(): Promise<void> {
     const text = line.trim();
     if (text === "/quit") break;
     if (!text) {
+      rl.prompt();
+      continue;
+    }
+    if (text.startsWith("/manual")) {
+      // Mirrors what the smb_message_echoes webhook does in coexistence mode.
+      const manual = text.slice("/manual".length).trim();
+      store.startHandoff(FROM, env.manualReplyPauseHours);
+      if (manual) store.appendHistory(FROM, "assistant", manual);
+      console.log(
+        dim(
+          `(you replied from your phone — bot pauses this chat for ${env.manualReplyPauseHours}h)\n`,
+        ),
+      );
       rl.prompt();
       continue;
     }

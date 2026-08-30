@@ -119,9 +119,14 @@ export class Store {
     return until !== undefined && until > now;
   }
 
+  /**
+   * Pauses auto-replies. Only ever extends an existing pause — a short
+   * manual-reply pause must not cut a longer formal handoff short.
+   */
   startHandoff(number: string, hours = env.handoffHours, now = Date.now()): void {
     this.updateChat(number, (chat) => {
-      chat.handoffUntil = now + hours * HOUR_MS;
+      const until = now + hours * HOUR_MS;
+      chat.handoffUntil = Math.max(chat.handoffUntil ?? 0, until);
     });
   }
 

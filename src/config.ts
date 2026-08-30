@@ -54,6 +54,12 @@ export const env = {
   maxRepliesPerHour: optionalNumber("MAX_REPLIES_PER_HOUR", 12),
   /** How long a chat stays paused after a handoff. */
   handoffHours: optionalNumber("HANDOFF_PAUSE_HOURS", 12),
+  /**
+   * How long the bot stays out of a chat after the agent replies by hand from
+   * the WhatsApp Business app (coexistence mode only). Each manual reply
+   * extends the pause.
+   */
+  manualReplyPauseHours: optionalNumber("MANUAL_REPLY_PAUSE_HOURS", 4),
   /** Conversation turns kept as context for Claude. */
   historyTurns: optionalNumber("HISTORY_TURNS", 12),
   dataDir: process.env.DATA_DIR ?? "data",

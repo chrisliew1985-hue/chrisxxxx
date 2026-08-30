@@ -101,6 +101,20 @@ export interface InboundMessage {
   timestamp: number;
 }
 
+/**
+ * A message the agent sent by hand from the WhatsApp Business app, echoed back
+ * to us by Meta. Only arrives when the number is running in coexistence mode.
+ */
+export interface EchoMessage {
+  /** Meta's message id, used for de-duplication. */
+  id: string;
+  /** The customer this manual reply was sent to (E.164 without `+`). */
+  to: string;
+  type: string;
+  text: string;
+  timestamp: number;
+}
+
 /** What the bot decided to do about one inbound message. */
 export interface Decision {
   /** Message to send, or null to stay silent. */
