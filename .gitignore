@@ -1,0 +1,18 @@
+# ComfyUI is cloned at setup time, never committed
+ComfyUI/
+venv/
+.venv/
+
+# Model weights and generated media
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+output/
+input/
+
+__pycache__/
+*.py[cod]
+.DS_Store
+*.log
