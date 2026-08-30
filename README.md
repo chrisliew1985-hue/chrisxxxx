@@ -22,8 +22,14 @@ PyPI torch wheel is used, ~1GB otherwise), plus whatever the checkpoints take.
 
 ## Running on a Mac
 
-Supported, and on Apple Silicon it uses the GPU through Metal (MPS) — the same
-three commands as the quick start, no flags needed:
+Supported, and on Apple Silicon it uses the GPU through Metal (MPS).
+
+You need the Xcode command line tools for `git` (`xcode-select --install`) and
+Python 3.10+. Note that the `python3` macOS ships is 3.9, below ComfyUI's
+minimum — `setup.sh` will use a newer interpreter if one is installed and tell
+you how to get one if not (`brew install python@3.12`). Budget ~8GB of disk.
+
+Then it is the same three commands as the quick start, no flags needed:
 
 ```bash
 ./scripts/setup.sh && ./scripts/download-model.sh sd15 && ./scripts/run.sh

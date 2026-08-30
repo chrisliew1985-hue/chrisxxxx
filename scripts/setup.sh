@@ -62,13 +62,30 @@ fi
 # --- checks -------------------------------------------------------------------
 command -v git >/dev/null 2>&1 || die "git is required but not installed"
 command -v curl >/dev/null 2>&1 || die "curl is required but not installed"
-PYTHON="${PYTHON:-python3}"
-command -v "$PYTHON" >/dev/null 2>&1 || die "$PYTHON not found; set PYTHON=/path/to/python3"
+py_ok() {
+  command -v "$1" >/dev/null 2>&1 &&
+    "$1" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null
+}
 
-"$PYTHON" - <<'PYVER' || die "ComfyUI requires Python 3.10 or newer"
-import sys
-sys.exit(0 if sys.version_info >= (3, 10) else 1)
-PYVER
+if [ -n "${PYTHON:-}" ]; then
+  command -v "$PYTHON" >/dev/null 2>&1 || die "$PYTHON not found"
+  py_ok "$PYTHON" || die "$PYTHON is $("$PYTHON" -V 2>&1), but ComfyUI needs 3.10 or newer"
+else
+  # macOS still ships 3.9 as python3, which is below ComfyUI's minimum. Rather
+  # than failing, fall through to any newer interpreter that is installed.
+  PYTHON=""
+  for candidate in python3 python3.13 python3.12 python3.11 python3.10; do
+    if py_ok "$candidate"; then PYTHON="$candidate"; break; fi
+  done
+  if [ -z "$PYTHON" ]; then
+    found=$(python3 -V 2>&1 || echo "none")
+    die "no Python 3.10+ on PATH (python3 is: $found)
+  macOS:  brew install python@3.12
+  Debian: sudo apt install python3.12 python3.12-venv
+  Then re-run, or point at it directly: PYTHON=/path/to/python3.12 $0"
+  fi
+fi
+log "Using $PYTHON ($("$PYTHON" -V 2>&1))"
 
 # --- fetch source -------------------------------------------------------------
 if [ -d "$COMFY_DIR/.git" ]; then
