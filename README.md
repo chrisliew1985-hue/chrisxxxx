@@ -155,3 +155,4 @@ text layers on disk.
 | `broll/media.py` | finding and running ffmpeg |
 | `broll/animate.py` | driving the Higgsfield CLI for `--animate` |
 | `tools/assemble_clips.py` | the same cut, self-contained, for running where only the clips are reachable |
+| `tools/cut_clips.py` | the same, with per-shot length, speed and transition - what keeps a reel from feeling flat |
