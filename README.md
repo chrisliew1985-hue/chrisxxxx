@@ -53,9 +53,13 @@ customer message
 
 ## Quick start (no WhatsApp account needed)
 
-You can talk to the bot before setting up anything with Meta:
+You need [Node.js 20 or newer](https://nodejs.org) — `node -v` tells you what
+you have. Then talk to the bot before setting up anything with Meta:
 
 ```bash
+git clone -b claude/whatsapp-auto-reply-bot-09feus \
+  https://github.com/chrisliew1985-hue/chrisxxxx.git whatsapp-bot
+cd whatsapp-bot
 npm install
 npm run dry-run
 ```
