@@ -70,7 +70,7 @@ AUTH=()
 log "Downloading $FILE -> $DEST"
 # --continue-at resumes a partial file; download to .part so an interrupted
 # transfer is never mistaken for a complete checkpoint.
-curl -fL --progress-bar --continue-at - "${AUTH[@]}" -o "$OUT.part" "$URL" \
+curl -fL --progress-bar --continue-at - ${AUTH[@]+"${AUTH[@]}"} -o "$OUT.part" "$URL" \
   || die "download failed (is huggingface.co reachable from this network?)"
 mv "$OUT.part" "$OUT"
 

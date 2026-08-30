@@ -20,6 +20,38 @@ Then open <http://127.0.0.1:8188>.
 Budget roughly **8GB of disk** for the install (a 6GB virtualenv where the
 PyPI torch wheel is used, ~1GB otherwise), plus whatever the checkpoints take.
 
+## Running on a Mac
+
+Supported, and on Apple Silicon it uses the GPU through Metal (MPS) — the same
+three commands as the quick start, no flags needed:
+
+```bash
+./scripts/setup.sh && ./scripts/download-model.sh sd15 && ./scripts/run.sh
+```
+
+`setup.sh` detects Apple Silicon and installs the Metal-capable torch wheel from
+PyPI (PyTorch's own wheel index carries no macOS builds). `run.sh` then asks
+torch what it can use, rather than only asking about CUDA, so a Mac is driven on
+MPS instead of being misread as CPU-only.
+
+It also exports `PYTORCH_ENABLE_MPS_FALLBACK=1`. A few torch ops still have no
+Metal kernel, and without it an unimplemented op aborts the whole run instead of
+falling back to the CPU for that one step.
+
+Rough expectations, 512x512 SD1.5 at 20 steps:
+
+| Machine | Per image |
+| --- | --- |
+| M1/M2/M3, 16GB+ | seconds to ~30s |
+| M-series, 8GB | works; SDXL is tight, keep to SD1.5 |
+| Intel Mac | CPU only — minutes per image, no Metal |
+
+Memory is unified on Apple Silicon, so image size and model competing with the
+rest of the system is the usual limit. If you hit it, `./scripts/run.sh --lowvram`.
+
+Note the scripts run under `/bin/bash`, which is still 3.2 on macOS; array
+expansions are written to be safe there.
+
 ## Running on Colab, with models in Google Drive
 
 If you have no local GPU, `colab/ComfyUI_Colab.ipynb` runs ComfyUI on Colab's
@@ -59,7 +91,7 @@ All three read the same environment variables:
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `COMFY_DIR` | `$HOME/ComfyUI` | Install location |
-| `COMFY_ACCEL` | `auto` | `setup.sh`: `auto`, `cpu`, `cu124`, `cu128` (torch build). `run.sh`: `auto`, `cpu`, `gpu` |
+| `COMFY_ACCEL` | `auto` | `setup.sh`: `auto`, `cpu`, `mps`, `cu124`, `cu128` (torch build). `run.sh`: `auto`, `cpu`, `gpu`, `mps` |
 | `COMFY_REF` | default branch | Git ref/tag to check out |
 | `COMFY_HOST` | `127.0.0.1` | Bind address (`run.sh`) |
 | `COMFY_PORT` | `8188` | Bind port (`run.sh`) |
@@ -123,6 +155,12 @@ Installed and booted on this configuration:
 - Linux x86_64, 4 cores, 15GB RAM, no GPU
 - Python 3.11.15, torch 2.13.0 (PyPI fallback wheel), ComfyUI 0.34.0
 - Server came up on CPU and served the UI with 902 node types registered
+
+The macOS paths were **not run on a Mac** — none was available. What was checked:
+accelerator detection was exercised with a stubbed `uname` (Apple Silicon -> MPS,
+Intel -> CPU, Linux unchanged), and the device-detection logic against stubbed
+torch builds (CUDA -> gpu, Metal -> mps, neither -> cpu, including a torch too
+old to have `backends.mps` at all).
 
 Image generation itself was not exercised, because `huggingface.co` was
 blocked on that network and no checkpoint could be fetched.

@@ -13,7 +13,7 @@
 #   COMFY_DIR   ComfyUI install directory.  (default: $HOME/ComfyUI)
 #   COMFY_HOST  Address to bind.            (default: 127.0.0.1)
 #   COMFY_PORT  Port to bind.               (default: 8188)
-#   COMFY_ACCEL auto|cpu|gpu                (default: auto)
+#   COMFY_ACCEL auto|cpu|gpu|mps            (default: auto)
 
 set -euo pipefail
 
@@ -27,17 +27,37 @@ die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 [ -x "$VENV/bin/python" ] || die "no virtualenv at $VENV — run ./scripts/setup.sh first"
 
-# Without a working CUDA device ComfyUI must be told to stay on the CPU,
-# otherwise it aborts on startup looking for one.
-ACCEL_ARGS=()
+# Ask torch what it can actually use. Checking CUDA alone would misreport an
+# Apple Silicon Mac as CPU-only and hand ComfyUI --cpu, quietly throwing away
+# the GPU.
 if [ "$COMFY_ACCEL" = "auto" ]; then
-  if "$VENV/bin/python" -c 'import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)' 2>/dev/null; then
-    COMFY_ACCEL="gpu"
-  else
-    COMFY_ACCEL="cpu"
-  fi
+  COMFY_ACCEL=$("$VENV/bin/python" - <<'PY'
+import torch
+mps = getattr(torch.backends, "mps", None)
+if torch.cuda.is_available():
+    print("gpu")
+elif mps is not None and mps.is_available():
+    print("mps")
+else:
+    print("cpu")
+PY
+) || die "could not query torch — is the install complete?"
 fi
-[ "$COMFY_ACCEL" = "cpu" ] && ACCEL_ARGS+=(--cpu)
+
+# Empty arrays are expanded with the ${x[@]+"${x[@]}"} guard throughout: under
+# `set -u`, bash 3.2 (still the /bin/bash on macOS) treats a bare "${x[@]}" on an
+# empty array as an unbound variable and aborts.
+ACCEL_ARGS=()
+case "$COMFY_ACCEL" in
+  cpu) ACCEL_ARGS+=(--cpu) ;;
+  mps)
+    # Not every torch op has a Metal kernel; without this an unimplemented op
+    # aborts the run instead of quietly falling back to the CPU for that step.
+    export PYTORCH_ENABLE_MPS_FALLBACK="${PYTORCH_ENABLE_MPS_FALLBACK:-1}"
+    ;;
+  gpu) ;;
+  *) die "COMFY_ACCEL must be one of: auto, cpu, gpu, mps (got '$COMFY_ACCEL')" ;;
+esac
 
 printf '\033[1;36m==>\033[0m Starting ComfyUI (%s) on http://%s:%s\n' \
   "$COMFY_ACCEL" "$COMFY_HOST" "$COMFY_PORT"
@@ -46,5 +66,5 @@ cd "$COMFY_DIR"
 exec "$VENV/bin/python" main.py \
   --listen "$COMFY_HOST" \
   --port "$COMFY_PORT" \
-  "${ACCEL_ARGS[@]}" \
+  ${ACCEL_ARGS[@]+"${ACCEL_ARGS[@]}"} \
   "$@"

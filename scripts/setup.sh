@@ -24,8 +24,18 @@ log() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 # --- pick a torch build -------------------------------------------------------
+OS="$(uname -s)"
+
 if [ "$COMFY_ACCEL" = "auto" ]; then
-  if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+  if [ "$OS" = "Darwin" ]; then
+    if [ "$(uname -m)" = "arm64" ]; then
+      COMFY_ACCEL="mps"
+      log "Apple Silicon detected, using the Metal-capable torch build"
+    else
+      COMFY_ACCEL="cpu"
+      log "Intel Mac detected, using CPU torch build (Metal needs Apple Silicon)"
+    fi
+  elif command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
     COMFY_ACCEL="cu124"
     log "NVIDIA GPU detected, using CUDA 12.4 torch build"
   else
@@ -34,12 +44,20 @@ if [ "$COMFY_ACCEL" = "auto" ]; then
   fi
 fi
 
+# An empty TORCH_INDEX means "install from PyPI".
 case "$COMFY_ACCEL" in
+  mps)   TORCH_INDEX="" ;;
   cpu)   TORCH_INDEX="https://download.pytorch.org/whl/cpu" ;;
   cu124) TORCH_INDEX="https://download.pytorch.org/whl/cu124" ;;
   cu128) TORCH_INDEX="https://download.pytorch.org/whl/cu128" ;;
-  *)     die "COMFY_ACCEL must be one of: auto, cpu, cu124, cu128 (got '$COMFY_ACCEL')" ;;
+  *)     die "COMFY_ACCEL must be one of: auto, cpu, mps, cu124, cu128 (got '$COMFY_ACCEL')" ;;
 esac
+
+# macOS wheels on PyPI already carry Metal support, and PyTorch's own index has
+# no macOS builds to offer, so never send a Mac to the CPU index.
+if [ "$OS" = "Darwin" ]; then
+  TORCH_INDEX=""
+fi
 
 # --- checks -------------------------------------------------------------------
 command -v git >/dev/null 2>&1 || die "git is required but not installed"
@@ -79,7 +97,10 @@ log "Upgrading pip"
 # Some sandboxed/corporate networks allow PyPI but block download.pytorch.org.
 # Probe it first and fall back to PyPI rather than failing the whole install.
 # The PyPI wheel bundles CUDA, so it is larger but runs fine on a CPU-only host.
-if curl -fsI --max-time 20 "$TORCH_INDEX/torch/" >/dev/null 2>&1; then
+if [ -z "$TORCH_INDEX" ]; then
+  log "Installing torch ($COMFY_ACCEL) from PyPI"
+  "$PIP" install torch torchvision torchaudio
+elif curl -fsI --max-time 20 "$TORCH_INDEX/torch/" >/dev/null 2>&1; then
   log "Installing torch ($COMFY_ACCEL) from $TORCH_INDEX"
   "$PIP" install --index-url "$TORCH_INDEX" torch torchvision torchaudio
 else
@@ -96,8 +117,15 @@ log "Installing ComfyUI dependencies"
 log "Verifying install"
 "$VENV/bin/python" - <<'CHECK'
 import torch
+mps = getattr(torch.backends, "mps", None)
+if torch.cuda.is_available():
+    device = "cuda"
+elif mps is not None and mps.is_available():
+    device = "mps (Metal)"
+else:
+    device = "cpu"
 print(f"  torch          {torch.__version__}")
-print(f"  cuda available {torch.cuda.is_available()}")
+print(f"  device         {device}")
 CHECK
 printf '  comfyui        %s\n' "$(sed -n 's/^__version__ = "\(.*\)"/\1/p' "$COMFY_DIR/comfyui_version.py")"
 
