@@ -31,7 +31,11 @@ Bodaiju Residences @ Medini（菩提树，Iskandar Puteri, Johor）的销售手�
 
 ### 网页版 `web/`
 
-`web/index.html` 是手机版速查页的源码，已发布成可分享链接，带看时直接翻。
+`web/index.html` 是手机版速查页的源码。已发布：**https://claude.ai/artifact/CcpqfVZyHNAQ2Y1xqtvsj9**
+
+网页版比 markdown 多三样东西：外籍买家成本试算器（改房价、成数、利率、同意费口径，现场算入场现金与月净现金流）、异议关键词筛选、待核实清单的勾选记录（只存在你自己的手机上）。
+
+链接目前是私有的，要发给同事的话在页面右上角 Share 里开权限。改了 `web/index.html` 之后，重新发布同一个文件就会更新这个链接，网址不变。
 
 ## 三条使用纪律
 

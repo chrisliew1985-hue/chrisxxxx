@@ -1,0 +1,631 @@
+<title>Bodaiju 带看手册</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700&family=Noto+Sans+SC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+  :root{
+    --paper:#F4F6F3;
+    --card:#FFFFFF;
+    --sunk:#EBEEE9;
+    --line:#D9DED7;
+    --line-soft:#E7EBE5;
+    --ink:#131C22;
+    --ink-2:#44534D;
+    --ink-3:#6E7B74;
+    --indigo:#1F4A6F;
+    --indigo-soft:#E4EDF4;
+    --moss:#4C7446;
+    --moss-soft:#E6EFE3;
+    --amber:#976710;
+    --amber-soft:#F6EEDC;
+    --clay:#9E3E2C;
+    --clay-soft:#F6E5E0;
+    --shadow:0 1px 2px rgba(19,28,34,.06),0 6px 18px rgba(19,28,34,.05);
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --paper:#0E1417;
+      --card:#151D21;
+      --sunk:#1B2429;
+      --line:#2A353B;
+      --line-soft:#212B30;
+      --ink:#E7ECE8;
+      --ink-2:#AFBCB5;
+      --ink-3:#84948D;
+      --indigo:#8FBEDF;
+      --indigo-soft:#17303F;
+      --moss:#93C286;
+      --moss-soft:#18291A;
+      --amber:#E0B569;
+      --amber-soft:#2C2312;
+      --clay:#E79781;
+      --clay-soft:#2F1A15;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.25);
+      color-scheme:dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#0E1417;
+    --card:#151D21;
+    --sunk:#1B2429;
+    --line:#2A353B;
+    --line-soft:#212B30;
+    --ink:#E7ECE8;
+    --ink-2:#AFBCB5;
+    --ink-3:#84948D;
+    --indigo:#8FBEDF;
+    --indigo-soft:#17303F;
+    --moss:#93C286;
+    --moss-soft:#18291A;
+    --amber:#E0B569;
+    --amber-soft:#2C2312;
+    --clay:#E79781;
+    --clay-soft:#2F1A15;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.25);
+    color-scheme:dark;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+    font-size:15px;
+    line-height:1.7;
+    -webkit-text-size-adjust:100%;
+  }
+  h1,h2,h3{font-family:"Zen Kaku Gothic New","Noto Sans SC",system-ui,sans-serif;text-wrap:balance;margin:0}
+  .mono,code,input,select,.val{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+
+  header.top{
+    position:sticky;top:env(safe-area-inset-top,0px);z-index:20;
+    background:color-mix(in srgb,var(--paper) 88%,transparent);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+  .topin{max-width:820px;margin:0 auto;padding:10px 16px 0}
+  .brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .brand h1{font-size:17px;font-weight:700;letter-spacing:.01em}
+  .brand .sub{font-size:11px;color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase}
+  nav.chips{display:flex;gap:6px;overflow-x:auto;padding:8px 0 9px;scrollbar-width:none}
+  nav.chips::-webkit-scrollbar{display:none}
+  nav.chips a{
+    flex:0 0 auto;font-size:12.5px;text-decoration:none;color:var(--ink-2);
+    padding:4px 11px;border:1px solid var(--line);border-radius:999px;background:var(--card);
+    white-space:nowrap;transition:.15s;
+  }
+  nav.chips a:hover{border-color:var(--indigo);color:var(--indigo)}
+  nav.chips a.on{background:var(--indigo);border-color:var(--indigo);color:var(--card)}
+
+  main{max-width:820px;margin:0 auto;padding-block:8px 64px;padding-left:16px;padding-right:16px;display:flex;flex-direction:column;gap:34px}
+  section{scroll-margin-top:110px}
+  .sechead{display:flex;align-items:baseline;gap:10px;margin-bottom:12px;padding-bottom:7px;border-bottom:1.5px solid var(--ink)}
+  .sechead h2{font-size:16px;font-weight:700}
+  .sechead .en{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-family:"IBM Plex Mono",monospace}
+  .lede{color:var(--ink-2);font-size:13.5px;margin:0 0 14px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 15px;box-shadow:var(--shadow)}
+  .stack{display:flex;flex-direction:column;gap:12px}
+
+  .kv{display:grid;grid-template-columns:minmax(88px,34%) 1fr;gap:0}
+  .kv>div{padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:13.5px}
+  .kv>div:nth-child(odd){color:var(--ink-3);padding-right:12px}
+  .kv>div:nth-last-child(-n+2){border-bottom:0}
+
+  .tag{display:inline-block;font-size:10.5px;line-height:1.5;padding:1px 6px;border-radius:4px;font-family:"IBM Plex Mono",monospace;vertical-align:middle;white-space:nowrap}
+  .t-ok{background:var(--moss-soft);color:var(--moss)}
+  .t-ref{background:var(--indigo-soft);color:var(--indigo)}
+  .t-warn{background:var(--amber-soft);color:var(--amber)}
+  .t-stop{background:var(--clay-soft);color:var(--clay)}
+
+  .scrollx{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{border-collapse:collapse;width:100%;min-width:640px;font-size:13.5px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line-soft);white-space:nowrap}
+  th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-family:"IBM Plex Mono",monospace;font-weight:600}
+  td.num{text-align:right;font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+  tbody tr:last-child td{border-bottom:0}
+
+  .calc{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:11px}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-family:"IBM Plex Mono",monospace}
+  input,select{
+    font-size:14px;padding:8px 9px;border:1px solid var(--line);border-radius:7px;
+    background:var(--sunk);color:var(--ink);width:100%;
+  }
+  input:focus-visible,select:focus-visible{outline:2px solid var(--indigo);outline-offset:1px}
+  .out{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+  .outrow{display:flex;justify-content:space-between;gap:12px;padding:5px 0;font-size:13.5px;border-bottom:1px dotted var(--line-soft)}
+  .outrow:last-child{border-bottom:0}
+  .outrow .val{font-weight:600}
+  .outrow.total{border-top:1.5px solid var(--ink);border-bottom:0;margin-top:6px;padding-top:9px;font-weight:700}
+  .outrow.neg .val{color:var(--clay)}
+  .outrow.pos .val{color:var(--moss)}
+
+  .obj{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:13px 14px;box-shadow:var(--shadow)}
+  .obj h3{font-size:14px;font-weight:700;margin-bottom:7px}
+  .obj .fact{font-size:12.5px;color:var(--ink-2);margin:0 0 9px}
+  .say{
+    position:relative;background:var(--sunk);border-radius:8px;padding:10px 40px 10px 12px;
+    font-family:"IBM Plex Mono",monospace;font-size:12.5px;line-height:1.85;white-space:pre-wrap;color:var(--ink);
+  }
+  .say .cp{
+    position:absolute;top:6px;right:6px;border:1px solid var(--line);background:var(--card);color:var(--ink-3);
+    border-radius:6px;font-size:10.5px;padding:2px 7px;cursor:pointer;font-family:"IBM Plex Mono",monospace;
+  }
+  .say .cp:hover{color:var(--indigo);border-color:var(--indigo)}
+  .never{font-size:12px;color:var(--clay);margin:9px 0 0}
+
+  .filter{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+  .filter input{flex:1}
+  .count{font-size:11.5px;color:var(--ink-3);font-family:"IBM Plex Mono",monospace;white-space:nowrap}
+
+  ol.steps{list-style:none;counter-reset:s;margin:0;padding:0;display:flex;flex-direction:column;gap:0}
+  ol.steps li{counter-increment:s;position:relative;padding:0 0 16px 34px;border-left:2px solid var(--line);margin-left:9px}
+  ol.steps li:last-child{border-left-color:transparent;padding-bottom:0}
+  ol.steps li::before{
+    content:counter(s);position:absolute;left:-11px;top:0;width:20px;height:20px;border-radius:50%;
+    background:var(--indigo);color:var(--card);font-family:"IBM Plex Mono",monospace;font-size:11px;
+    display:flex;align-items:center;justify-content:center;font-weight:600;
+  }
+  ol.steps b{display:block;font-size:14px}
+  ol.steps span{font-size:12.5px;color:var(--ink-2)}
+
+  ul.plain{margin:0;padding-left:18px;font-size:13.5px}
+  ul.plain li{margin-bottom:6px}
+  ul.plain li:last-child{margin-bottom:0}
+
+  .risk{display:flex;gap:11px;padding:10px 0;border-bottom:1px solid var(--line-soft);font-size:13.5px}
+  .risk:last-child{border-bottom:0}
+  .risk .n{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--clay);padding-top:3px;flex:0 0 auto}
+
+  .chk{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line-soft)}
+  .chk:last-child{border-bottom:0}
+  .chk input{width:17px;height:17px;flex:0 0 auto;margin-top:3px;accent-color:var(--moss)}
+  .chk label{font-size:13.5px;cursor:pointer}
+  .chk .who{display:block;font-size:11.5px;color:var(--ink-3);font-family:"IBM Plex Mono",monospace;margin-top:1px}
+  .chk.done label{opacity:.5;text-decoration:line-through}
+
+  .note{font-size:12px;color:var(--ink-3);margin:10px 0 0}
+  .callout{border-left:3px solid var(--amber);background:var(--amber-soft);padding:11px 13px;border-radius:0 8px 8px 0;font-size:13px}
+  .callout.stop{border-left-color:var(--clay);background:var(--clay-soft)}
+  .callout b{color:var(--ink)}
+  a{color:var(--indigo)}
+  footer{max-width:820px;margin:0 auto;padding:0 16px 40px;font-size:11.5px;color:var(--ink-3);line-height:1.8}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<header class="top">
+  <div class="topin">
+    <div class="brand">
+      <h1>Bodaiju Residences @ Medini</h1>
+      <span class="sub">带看手册 · 2026-09-20</span>
+    </div>
+    <nav class="chips" id="nav">
+      <a href="#quick" class="on">速查</a>
+      <a href="#units">户型价格</a>
+      <a href="#calc">成本试算</a>
+      <a href="#rules">外资规则</a>
+      <a href="#place">位置与 RTS</a>
+      <a href="#obj">异议应对</a>
+      <a href="#script">话术</a>
+      <a href="#flow">流程</a>
+      <a href="#risk">风险披露</a>
+      <a href="#verify">待核实</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <section id="quick">
+    <div class="sechead"><h2>项目速查</h2><span class="en">At a glance</span></div>
+    <p class="lede">数字后面的标记：<span class="tag t-ok">官方</span> 发展商或官方渠道 · <span class="tag t-ref">公开</span> 中介媒体，方向可信 · <span class="tag t-warn">待核</span> 来源冲突或政策类，报价前必须确认。</p>
+    <div class="card">
+      <div class="kv">
+        <div>发展商</div><div>Creed Property Malaysia Sdn Bhd（Creed Group，1996 年东京成立）<span class="tag t-ok">官方</span></div>
+        <div>总承建商</div><div>MGB Group，合约约 RM186m，工期 27 个月 <span class="tag t-ref">公开</span></div>
+        <div>地点</div><div>Jalan Medini Sentral 5, Medini, 79250 Iskandar Puteri</div>
+        <div>类型</div><div>服务式公寓 Service Residence</div>
+        <div>地契</div><div>99 年 leasehold <span class="tag t-warn">到期年待核</span></div>
+        <div>规模</div><div>两座塔楼共约 802 units；Tower A 32 层 405 units</div>
+        <div>地段</div><div>约 3.54 acres</div>
+        <div>动工</div><div>2025 年 9 月</div>
+        <div>交付</div><div>预计 2027–2028 <span class="tag t-warn">以 SPA 为准</span></div>
+        <div>停车</div><div>1,446 bays，G 至 L6，含 80 访客位；配 EV 充电</div>
+        <div>设施</div><div>L7 与屋顶花园：泳池、健身房、瑜伽平台、BBQ、儿童泳池与游乐场</div>
+        <div>认证</div><div>GreenRE</div>
+      </div>
+    </div>
+    <div class="callout stop" style="margin-top:12px">
+      <b>三句不能说的话：</b>保证出租、日本公司不会烂尾、RTS 直达 Medini。前两句没有依据，第三句是错的。
+    </div>
+  </section>
+
+  <section id="units">
+    <div class="sechead"><h2>户型与价格</h2><span class="en">Layouts</span></div>
+    <p class="lede">公开广告价区间 RM299,000–659,000。Type B / C 的起价来自中介挂牌，<b>报价前先向发展商要当期价目表</b>。</p>
+    <div class="card scrollx">
+      <table>
+        <thead><tr><th>户型</th><th>面积</th><th>格局</th><th>车位</th><th class="num">参考价</th><th class="num">RM/sf</th><th class="num">月管理费</th></tr></thead>
+        <tbody>
+          <tr><td>Type A</td><td class="num">463 sf</td><td>1 房 1 卫</td><td>1</td><td class="num">299,000</td><td class="num">646</td><td class="num">≈163</td></tr>
+          <tr><td>Type B</td><td class="num">753 sf</td><td>2 房 2 卫</td><td>1</td><td class="num">430,000</td><td class="num">571</td><td class="num">≈265</td></tr>
+          <tr><td>Type C</td><td class="num">893 sf</td><td>3 房 2 卫</td><td>2 / tandem</td><td class="num">510,000</td><td class="num">571</td><td class="num">≈314</td></tr>
+          <tr><td>Type C1 双匙</td><td class="num">1,012 sf</td><td>3 房两入口</td><td>2</td><td class="num">659,000</td><td class="num">651</td><td class="num">≈356</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">管理费按 RM0.32 psf/月估算，另加 10% sinking fund，正式费率由管理机构议决。<span class="tag t-warn">待核</span></p>
+    <div class="card" style="margin-top:12px">
+      <div class="kv">
+        <div>Type A</div><div>入场用。总价最低，租客池最窄，同类竞争最多</div>
+        <div>Type B</div><div>面积与总价的平衡点，租赁市场最主流，只有 1 个车位</div>
+        <div>Type C</div><div>EduCity 家长与本地升级客，3 房 2 车位</div>
+        <div>Type C1</div><div>半自住半出租，转售客群较窄，估价可能保守</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="calc">
+    <div class="sechead"><h2>成本试算</h2><span class="en">Cost model</span></div>
+    <p class="lede">客户最后不买，多半不是因为房价，是因为「我以为只要头期」。现场把这一页算给他看。</p>
+    <div class="card">
+      <div class="calc">
+        <div class="field"><label for="ctype">户型</label>
+          <select id="ctype">
+            <option value="463|299000">Type A 463 sf</option>
+            <option value="753|430000" selected>Type B 753 sf</option>
+            <option value="893|510000">Type C 893 sf</option>
+            <option value="1012|659000">Type C1 1,012 sf</option>
+          </select>
+        </div>
+        <div class="field"><label for="cprice">房价 RM</label><input id="cprice" type="number" inputmode="numeric" step="1000" value="430000"></div>
+        <div class="field"><label for="cltv">贷款成数 %</label><input id="cltv" type="number" inputmode="numeric" step="5" value="70"></div>
+        <div class="field"><label for="crate">利率 %</label><input id="crate" type="number" inputmode="decimal" step="0.1" value="4.5"></div>
+        <div class="field"><label for="cyear">年期</label><input id="cyear" type="number" inputmode="numeric" step="5" value="30"></div>
+        <div class="field"><label for="cconsent">同意费口径</label>
+          <select id="cconsent">
+            <option value="min30" selected>3% 或最低 3 万</option>
+            <option value="flat50">起跳 5 万</option>
+            <option value="pct3">纯 3%，不设下限</option>
+          </select>
+        </div>
+        <div class="field"><label for="crent">预估月租 RM</label><input id="crent" type="number" inputmode="numeric" step="100" value="2000"></div>
+      </div>
+
+      <div class="out">
+        <div class="outrow"><span>头期</span><span class="val" id="o-dp">RM0</span></div>
+        <div class="outrow"><span>MOT 印花税 8%（外籍，2026 起）</span><span class="val" id="o-sd">RM0</span></div>
+        <div class="outrow"><span>柔佛外资同意费 <span class="tag t-warn">待核</span></span><span class="val" id="o-cs">RM0</span></div>
+        <div class="outrow"><span>估价与杂费（估）</span><span class="val" id="o-misc">RM3,000</span></div>
+        <div class="outrow total"><span>入场现金合计</span><span class="val" id="o-cash">RM0</span></div>
+        <div class="outrow"><span>占房价</span><span class="val" id="o-pct">0%</span></div>
+      </div>
+
+      <div class="out">
+        <div class="outrow"><span>贷款额</span><span class="val" id="o-loan">RM0</span></div>
+        <div class="outrow"><span>月供</span><span class="val" id="o-mth">RM0</span></div>
+        <div class="outrow"><span>管理费 + sinking fund</span><span class="val" id="o-mf">RM0</span></div>
+        <div class="outrow"><span>门牌税与保险摊分（估）</span><span class="val">RM150</span></div>
+        <div class="outrow total"><span>每月支出</span><span class="val" id="o-exp">RM0</span></div>
+      </div>
+
+      <div class="out">
+        <div class="outrow"><span>月租</span><span class="val" id="o-rent">RM0</span></div>
+        <div class="outrow"><span>减 管理费与杂项</span><span class="val" id="o-less1">RM0</span></div>
+        <div class="outrow"><span>减 年均空置一个月摊分</span><span class="val" id="o-less2">RM0</span></div>
+        <div class="outrow"><span>减 非居民租金税 30%</span><span class="val" id="o-tax">RM0</span></div>
+        <div class="outrow total" id="row-flow"><span>每月净现金流</span><span class="val" id="o-flow">RM0</span></div>
+      </div>
+      <p class="note">假设：利息一般可抵扣租金税，此处未计入，以税务师意见为准。租金参考 Medini 其他项目 2–3 房挂牌 RM2,000–2,700，不是本项目的保证。同意费三个口径并存，见「待核实」第 3 项。</p>
+    </div>
+  </section>
+
+  <section id="rules">
+    <div class="sechead"><h2>Medini 外资规则</h2><span class="en">Eligibility</span></div>
+    <div class="card stack">
+      <div>
+        <h3 style="font-size:14px">最硬的一条卖点</h3>
+        <p style="margin:6px 0 0;font-size:13.5px">柔佛对外国买家的最低价门槛是 <b>RM1,000,000</b>。<b>Medini 区域内、直接向发展商购买的新 strata 单位豁免这个门槛</b>，所以这里可以从 RM299,000 起。</p>
+      </div>
+      <div class="callout">
+        三个限定条件缺一条就是误导：<br>
+        1. 只适用 Medini 区内，JB 市区不适用<br>
+        2. 只适用新单位、直接跟发展商买<br>
+        3. 豁免的是价格门槛，不是审批程序
+      </div>
+      <div class="kv">
+        <div>同意费</div><div>3% 或最低 RM30,000（2025-07-01 起）／项目网站称起跳 RM50,000／某案约 RM36,000 <span class="tag t-warn">三个版本</span></div>
+        <div>Bumi 配额</div><div>无</div>
+        <div>国籍</div><div>不限</div>
+        <div>MM2H</div><div>买房不需要，买房也不等于拿到签证</div>
+        <div>短租</div><div>截至 2026-08 未见官方禁令，管理机构成立后可自订附则 <span class="tag t-warn">待核</span></div>
+        <div>RPGT</div><div>外籍 5 年内 30%，第 6 年起 10%，不归零</div>
+        <div>租金税</div><div>非税务居民净收入 30%</div>
+        <div>CPF</div><div>不能用于马来西亚房产</div>
+      </div>
+      <div>
+        <h3 style="font-size:14px">JS-SEZ 怎么讲</h3>
+        <p style="margin:6px 0 0;font-size:13.5px">Medini 是柔新特别经济区九个 flagship zones 之一，优惠包括合资格企业最低 5% 企业税，申请期至 2034 年底。<b>这些是给企业的，不是给买家个人的。</b>对买家的意义只有一个：企业进来，租客池才会变厚，而这要几年才看得出来。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="place">
+    <div class="sechead"><h2>位置与 RTS</h2><span class="en">Location</span></div>
+    <div class="card stack">
+      <div class="kv">
+        <div>第二通道</div><div>约 9 km（往新加坡 Tuas）</div>
+        <div>巴士站</div><div>约 100 m</div>
+        <div>商场</div><div>Mall of Medini、Sunway Big Box、Eco Galleria、Legoland、X Park</div>
+        <div>教育</div><div>EduCity：Marlborough College、Newcastle University Medicine、Raffles American School</div>
+        <div>医疗</div><div>Gleneagles Hospital Medini</div>
+        <div>海滨</div><div>Puteri Harbour</div>
+      </div>
+      <div class="callout stop">
+        <b>RTS 的柔佛端在 Bukit Chagar，不在 Medini。</b>目标 2027 年 1 月通车，Woodlands North 站已于 2026 年 9 月 4 日完工。住 Medini 的人过关主要走第二通道。客户如果核心需求是天天搭 RTS 通勤，直接告诉他这里不是最优解。
+      </div>
+      <div class="say">RTS 的站在 JB 市区，不在 Medini
+你如果是天天搭 RTS 通勤，这里不是最方便的选择
+Medini 的过关靠第二通道，9 公里
+你平常从哪一边进出新加坡？我帮你算一下实际时间<button class="cp" type="button">复制</button></div>
+      <p class="note">车程没有公开数据。平日早上 7:30 与周末各跑一次，把实测时间记在手机里，比背宣传资料有用。</p>
+    </div>
+  </section>
+
+  <section id="obj">
+    <div class="sechead"><h2>异议应对</h2><span class="en">Objections</span></div>
+    <div class="filter">
+      <input id="ofilter" type="search" placeholder="输入关键词筛选，例如 印花税、leasehold、RTS" aria-label="筛选异议">
+      <span class="count" id="ocount">20 条</span>
+    </div>
+    <div class="stack" id="objlist"></div>
+    <div class="callout" style="margin-top:12px">
+      通用原则：真的负面先承认，承认之后你讲的正面才有人信。一次只处理一个异议。不确定的回「我去确认，明天给你」，然后真的明天给。
+    </div>
+  </section>
+
+  <section id="script">
+    <div class="sechead"><h2>话术</h2><span class="en">Scripts</span></div>
+    <p class="lede">短句，一句一行，不写问候段，不写落款。<code>{}</code> 现场填。RM 数字一律从当期价目表来。</p>
+    <div class="stack" id="scriptlist"></div>
+    <div class="callout stop" style="margin-top:12px">
+      不要用：保证、稳赚、包租、最后机会、错过不再有。不要加倒计时。英文不要用 nestled、boasts、unlock、game-changer。
+    </div>
+  </section>
+
+  <section id="flow">
+    <div class="sechead"><h2>购买流程</h2><span class="en">Process</span></div>
+    <div class="card">
+      <ol class="steps">
+        <li><b>落订</b><span>选定单位，填 booking form，付订金。同时收护照、住址证明、收入文件</span></li>
+        <li><b>签 SPA</b><span>约 14 至 21 天后。服务式公寓不一定适用 HDA 的 Schedule H，先问律师</span></li>
+        <li><b>外资审批 + 贷款</b><span>并行。审批时长逐案不同，第一次就告诉客户这一段要等</span></li>
+        <li><b>建筑期分期付款</b><span>动工 2025-09，工期 27 个月。每季度主动发工程进度给客户</span></li>
+        <li><b>交楼验收</b><span>收 VP 通知，验房列缺陷，保修期以 SPA 条款为准</span></li>
+        <li><b>转名 MOT</b><span>缴 8% 外籍印花税。离签约两三年，客户最容易忘，落订当天就写进成本表</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="risk">
+    <div class="sechead"><h2>必须主动披露</h2><span class="en">Disclosure</span></div>
+    <p class="lede">不是等客户问，是带看讲解的第 6 步由你开口。主动讲风险的人，后面讲什么都更有分量。</p>
+    <div class="card">
+      <div class="risk"><span class="n">01</span><span>柔佛服务式公寓未售存量约 <b>9,000 units</b>，全国最高。租赁与转售都要跟同类竞争</span></div>
+      <div class="risk"><span class="n">02</span><span>按目前数字是<b>负现金流持有</b>，回报靠资本增值，不是租金</span></div>
+      <div class="risk"><span class="n">03</span><span>入场现金约房价的 <b>45% 至 50%</b></span></div>
+      <div class="risk"><span class="n">04</span><span>外籍税负不归零：RPGT 第六年起仍 10%，租金净收入 30%</span></div>
+      <div class="risk"><span class="n">05</span><span>2027–2028 才交付，期间有工程与市场两重不确定</span></div>
+      <div class="risk"><span class="n">06</span><span>99 年 <b>leasehold</b>，影响银行估价与转售</span></div>
+      <div class="risk"><span class="n">07</span><span>RTS 站<b>不在</b> Medini</span></div>
+    </div>
+    <p class="note">另外两项交付后才知道：服务式公寓的水电与门牌税可能按商业费率计，管理素质取决于管理公司。两项都不要提前承诺。</p>
+  </section>
+
+  <section id="verify">
+    <div class="sechead"><h2>待核实清单</h2><span class="en">Verify first</span></div>
+    <p class="lede">报价、写进合约讨论、或在 WhatsApp 里给结论之前，先把这一条确认掉。勾选只存在你这台手机上。</p>
+    <div class="card" id="chklist"></div>
+    <p class="note">复核节奏：价目表每次带看前；政策类每季度；其余变更时。上次全面复核 2026-09-20。</p>
+  </section>
+
+</main>
+
+<footer>
+  资料整理自公开渠道：bodaijumedini.my、PropertyGuru 项目页与中介挂牌、MGB Group、Stone Group 进度页、Creed Group、马来西亚外资买房指南类网站、RTS 报道（paultan、Malay Mail、SGTrains）、MIDA 与 PwC 的 JS-SEZ 说明。查证日期 2026-09-20。<br>
+  本页为内部整理，不是发展商官方文件，不构成投资、税务或法律建议。所有数字在签署任何文件前向发展商与律师核实。
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  var OBJ = [
+    {q:"Medini 免 RM1 million 那条，现在还算不算数？",f:"目前有效：Medini 区内、直接向发展商买的新 strata 单位豁免柔佛 RM1,000,000 门槛。政策近年调整过。",a:"目前还算，条件是 Medini 区内、新单位、直接跟发展商买\n不是整个柔佛都这样，JB 市区那边不行\n政策这两年动过，我签之前会再跟律师确认一次给你",n:"不要说「永远免」「保证不会变」"},
+    {q:"8% 印花税太贵了",f:"外籍 MOT 印花税 2026 年 1 月 1 日起由 4% 升到 8%。",a:"是，今年一月起从 4% 变 8%\n这笔跑不掉，我直接算给你看总数\nRM430,000 的话就是 RM34,400\n我们把这笔先放进预算，不要签了才发现",n:"不要说「可以想办法省」，税务安排转税务师"},
+    {q:"99 年 leasehold，到期怎么办",f:"项目为 99 年 leasehold，到期年份需以土地文件为准。",a:"是 leasehold，不是 freehold\n剩余年期我拿土地文件给你看，不凭印象讲\nleasehold 对银行估价和转售有影响，这点我不回避\n你如果一定要 freehold，Medini 这一带的选择会很少"},
+    {q:"柔佛房子过剩，租得出去吗",f:"柔佛服务式公寓未售存量约 9,000 units，全国最高。Medini 区 2–3 房挂牌租金约 RM2,000–2,700。",a:"供应确实多，这是柔佛的实况，我不会说没有\n所以我不用租金回报去说服你\n我用最保守的租金算给你看，你自己判断撑不撑得住",n:"不要说「包租」「保证出租」"},
+    {q:"RTS 通车会不会大涨",f:"RTS 柔佛端在 Bukit Chagar，不在 Medini。目标 2027 年 1 月通车。",a:"RTS 的站在 JB 市区，Medini 没有站\n它对整个柔佛南部有帮助，但不是这里的直接利好\nMedini 靠的是第二通道，9 公里"},
+    {q:"服务式公寓水电是不是算商业价",f:"服务式公寓常在商业地契上，水电与门牌税可能按商业费率计。本项目实际计法待核实。",a:"服务式公寓一般是商业费率，这点你问得对\n这个项目实际怎么算，我去跟发展商要书面答复\n拿到我再跟你讲，我不猜"},
+    {q:"2028 才交楼，太久",f:"动工 2025 年 9 月，工期 27 个月，交付看 2027 至 2028。",a:"动工 2025 年 9 月，工期 27 个月，交付看 2027 到 2028\n如果你明年就要用，这个项目对不上你\n我可以帮你看现成的二手，不用硬等"},
+    {q:"外国人只能贷 60% 到 70%？",f:"外籍买家 LTV 一般 60% 至 70%。",a:"对，外籍一般 60 到 70，看银行和你的收入证明\n所以头期要准备 30 到 40，加上印花税和同意费\n我先帮你把总现金算出来，再决定看哪个户型"},
+    {q:"卖的时候要交 30% RPGT？",f:"外籍个人 5 年内 30%，第 6 年起 10%，不归零。",a:"对，外籍五年内 30%，第六年起 10%，不归零\n所以短线进出在这里不划算\n你如果打算五年内卖，我建议不要买这一类"},
+    {q:"租金收入还要交 30% 税？",f:"非税务居民按租金净收入 30% 统一税率。贷款利息一般可抵扣，以税务师意见为准。",a:"对，非居民按净租金 30%\n利息一般可以抵，实际怎么算要看你的税务师\n我算模型的时候先不把利息抵扣算进去，保守一点"},
+    {q:"日本发展商在马来西亚靠谱吗",f:"Creed Group 1996 年东京成立，2000 年代中期进入东南亚，在金边完成过同名项目（928 units，2020 年 1 月落成）。",a:"Creed 是东京的公司，1996 年成立\n金边那个同名项目 2020 年交了，928 户\n这里是他们在马来西亚的项目，总包是 MGB\n履约记录我给你看资料，你自己判断",n:"不要说「日本公司不会烂尾」"},
+    {q:"管理费会不会很贵",f:"目前估算约 RM0.32 psf/月 + 10% sinking fund，交付后由管理机构议决。",a:"现在是估算，RM0.32 一尺，另加 10% sinking fund\n两房大概 RM265 一个月\n正式费率要等管理机构成立后议决，我现在不给你定数"},
+    {q:"将来好不好卖",f:"外国人买二手是否同样适用 Medini 的价格豁免，待核实。",a:"二手买家要面对什么门槛，我去确认清楚再答你\n我不会说很好卖\n我会说的是：小户型竞争最多，3 房和双匙的对手少一点"},
+    {q:"汇率会不会吃掉回报",f:"新币收入对马币供款，双向波动。",a:"你收入是新币，供款是马币，两边都会动\n我不预测汇率\n你就当成：马币走弱对你买入有利，对你卖出回款不利"},
+    {q:"可以做 Airbnb 吗",f:"截至 2026 年 8 月未见官方禁令，交付后管理机构可自订附则。",a:"现在没有官方禁令\n但交楼后管理机构可以自己订规矩，这点谁都不能替它保证\n你如果整个投资计划建立在短租上，我会说风险偏高"},
+    {q:"买了能不能拿签证 / MM2H",f:"买房与居留签证是两回事。",a:"买房跟签证是两件事，买房不等于拿到居留\nMM2H 有它自己的条件，我不在行\n你要的话我介绍做这块的人给你"},
+    {q:"463 尺太小了",f:"Type A 463 sf 一房，是入场户型。",a:"463 尺是 1 房，总价最低，入场用的\n你如果是自己住，我建议看 753 的 2 房\n差价我算给你，连印花税一起算"},
+    {q:"Dual key 值不值",f:"Type C1 1,012 sf，两个独立入口，转售客群较窄。",a:"双匙的好处是一边自住一边出租\n代价是将来转售的买家群比较窄\n我先用最保守的租金帮你算，看那一半能覆盖多少月供"},
+    {q:"跟 Forest City 比呢",f:"Medini 的学校、医院、商场是现成的。",a:"两个不一样\nMedini 的学校、医院、商场是现成的，人已经在那边\n你要比的话，我把两边的成本和租客来源并排列给你",n:"不要贬低其他项目，摆数据让客户自己比"},
+    {q:"我等 RTS 通车了再买",f:"这是合理选择。",a:"可以等，这是合理的选择\n等的代价是价格和优惠可能不一样\n等的好处是你看得到实际通车效果\n你要等的话，我们约通车后再看，我不催你"}
+  ];
+
+  var SCRIPTS = [
+    {t:"线上询盘第一次回复",a:"Hi {称呼}\nBodaiju 在 Medini，日本发展商 Creed\n一房 463 尺，两房 753 尺，三房 893 尺\n外国人可以买，Medini 这区没有 RM100 万门槛\n你是自己住还是投资？我按你的情况发资料给你"},
+    {t:"First reply (EN)",a:"Hi {name}\nBodaiju is in Medini, Japanese developer Creed\n1BR 463 sqft, 2BR 753 sqft, 3BR 893 sqft\nForeigners can buy here, no RM1m floor in Medini\nOwn stay or investment? I will send the right set for you"},
+    {t:"约看房",a:"Hi {称呼}\n示范单位我这周{日期}和{日期}都可以\n你从{新加坡哪一区}过来的话，走第二通道比较顺\n要我帮你排{时间}吗？现场看完我带你绕一圈 EduCity 和商场"},
+    {t:"看房前一天确认",a:"Hi {称呼}\n明天 {时间} Bodaiju 示范单位\n地址我发定位给你\n带护照方便登记\n关卡那边{早上/下午}通常{状况}，你预留{时间}"},
+    {t:"看房后 24 小时内",a:"Hi {称呼}\n昨天你说{他喜欢的那一点}\n{承诺要给的东西}我附上了\n{一个异议的回应，一句}\n你要不要我再算一版{他关心的数字}给你？"},
+    {t:"成本异议之后",a:"Hi {称呼}\n你问的总成本我列出来了\n头期 {金额}\n印花税 8% {金额}\n同意费 {金额}，这笔我跟律师确认过了\n合计大概 {金额}\n要不要我按{户型}再算一版？"},
+    {t:"沉默两周唤醒",a:"Hi {称呼}\n{户型}这边{实际变化：剩几间／价目表更新／工程进度}\n你那边还在考虑吗？没有的话我就不打扰你了"},
+    {t:"挂牌短文案",a:"Bodaiju Residences @ Medini\n日资 Creed Group\n1 房 463 尺 / 2 房 753 尺 / 3 房 893 尺 / 双匙 1,012 尺\n外国人可买，Medini 无 RM100 万门槛\n距第二通道约 9 公里\nEduCity、Gleneagles Medini、Mall of Medini 同一区\n预计 2027 至 2028 交付\n价格以发展商当期价目表为准"}
+  ];
+
+  var CHECKS = [
+    ["当期价目表、各户型实际起价、剩余单位","发展商销售"],
+    ["配套书面条款：免哪些费，是否包含 MOT 的 8%","发展商"],
+    ["外资同意费的实际金额与计算基准","指定律师"],
+    ["走州政府同意还是 IRDA / Medini 审批，多久","律师"],
+    ["地契剩余年期与到期年份","律师 / 土地文件"],
+    ["二手转售时外国买家是否同样适用价格豁免","律师"],
+    ["单位属住宅地契还是商业地契","发展商 / 律师"],
+    ["水电与门牌税按住宅还是商业费率","发展商 / 管理公司"],
+    ["是否受 HDA 管辖，合约是不是 Schedule H，保修期多久","律师"],
+    ["管理费与 sinking fund 正式费率、起算日","发展商"],
+    ["车位是否附属单位产权，能否单独转让","发展商"],
+    ["合约交付日期定义与 LAD 延迟赔偿条款","SPA"],
+    ["短租 / Airbnb 在 house rules 里怎么处理","发展商 / 管理公司"],
+    ["哪些银行承做，外籍 LTV 与利率区间","银行"],
+    ["Tower B 推出时间与定价","发展商"]
+  ];
+
+  function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
+  function sayBlock(text){return '<div class="say">'+esc(text)+'<button class="cp" type="button">复制</button></div>';}
+
+  var list=document.getElementById("objlist"),html="";
+  for(var i=0;i<OBJ.length;i++){
+    var o=OBJ[i];
+    html+='<div class="obj" data-k="'+esc(o.q+" "+o.f+" "+o.a)+'">'+
+      '<h3>'+(i+1)+'. 「'+esc(o.q)+'」</h3>'+
+      '<p class="fact">'+esc(o.f)+'</p>'+sayBlock(o.a)+
+      (o.n?'<p class="never">'+esc(o.n)+'</p>':'')+'</div>';
+  }
+  list.innerHTML=html;
+
+  var sl=document.getElementById("scriptlist"),shtml="";
+  for(var j=0;j<SCRIPTS.length;j++){
+    shtml+='<div class="obj"><h3>'+esc(SCRIPTS[j].t)+'</h3>'+sayBlock(SCRIPTS[j].a)+'</div>';
+  }
+  sl.innerHTML=shtml;
+
+  var STORE="bodaiju-verify-v1",saved={};
+  try{saved=JSON.parse(localStorage.getItem(STORE)||"{}")||{};}catch(e){saved={};}
+  var ck=document.getElementById("chklist"),chtml="";
+  for(var k=0;k<CHECKS.length;k++){
+    var on=saved[k]?" done":"";
+    chtml+='<div class="chk'+on+'"><input type="checkbox" id="ck'+k+'" data-i="'+k+'"'+(saved[k]?" checked":"")+'>'+
+      '<label for="ck'+k+'">'+esc(CHECKS[k][0])+'<span class="who">问 '+esc(CHECKS[k][1])+'</span></label></div>';
+  }
+  ck.innerHTML=chtml;
+  ck.addEventListener("change",function(e){
+    var t=e.target;if(t.type!=="checkbox")return;
+    t.parentNode.classList.toggle("done",t.checked);
+    saved[t.getAttribute("data-i")]=t.checked;
+    try{localStorage.setItem(STORE,JSON.stringify(saved));}catch(err){}
+  });
+
+  document.addEventListener("click",function(e){
+    var b=e.target;
+    if(!b.classList||!b.classList.contains("cp"))return;
+    var box=b.parentNode,text=box.textContent.replace(/复制$|已复制$/,"");
+    function done(){b.textContent="已复制";setTimeout(function(){b.textContent="复制";},1400);}
+    try{
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(done,function(){selectNode(box);});
+      }else{selectNode(box);}
+    }catch(err){selectNode(box);}
+  });
+  function selectNode(n){
+    try{
+      var r=document.createRange();r.selectNodeContents(n);
+      var s=window.getSelection();s.removeAllRanges();s.addRange(r);
+    }catch(e){}
+  }
+
+  var f=document.getElementById("ofilter"),cnt=document.getElementById("ocount"),cards=list.children;
+  f.addEventListener("input",function(){
+    var q=f.value.trim().toLowerCase(),n=0;
+    for(var i=0;i<cards.length;i++){
+      var hit=!q||cards[i].getAttribute("data-k").toLowerCase().indexOf(q)>-1;
+      cards[i].hidden=!hit;if(hit)n++;
+    }
+    cnt.textContent=n+" 条";
+  });
+
+  var rm=function(n){return "RM"+Math.round(n).toLocaleString("en-US");};
+  var ids=["ctype","cprice","cltv","crate","cyear","cconsent","crent"],el={};
+  ids.forEach(function(id){el[id]=document.getElementById(id);});
+  var out={};
+  ["o-dp","o-sd","o-cs","o-cash","o-pct","o-loan","o-mth","o-mf","o-exp","o-rent","o-less1","o-less2","o-tax","o-flow"].forEach(function(id){out[id]=document.getElementById(id);});
+
+  el.ctype.addEventListener("change",function(){
+    var p=el.ctype.value.split("|");el.cprice.value=p[1];calc();
+  });
+  ids.forEach(function(id){el[id].addEventListener("input",calc);});
+
+  function calc(){
+    var price=Math.max(0,+el.cprice.value||0),
+        ltv=Math.min(100,Math.max(0,+el.cltv.value||0)),
+        rate=Math.max(0,+el.crate.value||0),
+        years=Math.max(1,+el.cyear.value||1),
+        rent=Math.max(0,+el.crent.value||0),
+        sqft=+el.ctype.value.split("|")[0];
+
+    var dp=price*(1-ltv/100), sd=price*0.08, misc=3000, cs;
+    var mode=el.cconsent.value;
+    if(mode==="flat50")cs=Math.max(50000,price*0.03);
+    else if(mode==="pct3")cs=price*0.03;
+    else cs=Math.max(30000,price*0.03);
+
+    var cash=dp+sd+cs+misc, loan=price*ltv/100,
+        r=rate/100/12, n=years*12,
+        mth=r>0?loan*r/(1-Math.pow(1+r,-n)):loan/n,
+        mf=sqft*0.32*1.1, other=150,
+        exp=mth+mf+other,
+        vac=rent/12,
+        netBefore=rent-mf-other-vac,
+        tax=netBefore>0?netBefore*0.3:0,
+        flow=netBefore-tax-mth;
+
+    out["o-dp"].textContent=rm(dp);
+    out["o-sd"].textContent=rm(sd);
+    out["o-cs"].textContent=rm(cs);
+    out["o-cash"].textContent=rm(cash);
+    out["o-pct"].textContent=price>0?Math.round(cash/price*100)+"%":"0%";
+    out["o-loan"].textContent=rm(loan);
+    out["o-mth"].textContent=rm(mth);
+    out["o-mf"].textContent=rm(mf);
+    out["o-exp"].textContent=rm(exp);
+    out["o-rent"].textContent=rm(rent);
+    out["o-less1"].textContent="−"+rm(mf+other);
+    out["o-less2"].textContent="−"+rm(vac);
+    out["o-tax"].textContent="−"+rm(tax);
+    out["o-flow"].textContent=(flow<0?"−":"")+rm(Math.abs(flow));
+    var row=document.getElementById("row-flow");
+    row.classList.toggle("neg",flow<0);
+    row.classList.toggle("pos",flow>=0);
+  }
+  calc();
+
+  var navlinks=document.getElementById("nav").getElementsByTagName("a"),
+      secs=document.getElementsByTagName("section");
+  if("IntersectionObserver" in window){
+    var io=new IntersectionObserver(function(es){
+      es.forEach(function(en){
+        if(!en.isIntersecting)return;
+        var id=en.target.id;
+        for(var i=0;i<navlinks.length;i++){
+          navlinks[i].classList.toggle("on",navlinks[i].getAttribute("href")==="#"+id);
+        }
+      });
+    },{rootMargin:"-45% 0px -50% 0px"});
+    for(var s=0;s<secs.length;s++)io.observe(secs[s]);
+  }
+})();
+</script>
