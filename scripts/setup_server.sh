@@ -24,8 +24,16 @@ fi
 
 echo "== Installing Docker =="
 if ! command -v docker >/dev/null; then
-  curl -fsSL https://get.docker.com | sudo sh
+  # Docker's script can lag behind brand-new Ubuntu releases; fall back to Ubuntu's own packages.
+  curl -fsSL https://get.docker.com | sudo sh \
+    || { sudo apt-get update -qq && sudo apt-get install -y -qq docker.io docker-compose-v2; }
+  sudo systemctl enable --now docker
   [ "$(id -u)" -eq 0 ] || sudo usermod -aG docker "$USER"
+fi
+
+if ! sudo docker compose version >/dev/null 2>&1; then
+  sudo apt-get update -qq && sudo apt-get install -y -qq docker-compose-v2 \
+    || sudo apt-get install -y -qq docker-compose-plugin
 fi
 
 echo "== Opening web ports 80/443 on this machine's firewall =="
