@@ -17,6 +17,8 @@ import { DatabaseSync } from 'node:sqlite'
 import makeWASocket, {
   Browsers,
   DisconnectReason,
+  fetchLatestBaileysVersion,
+  fetchLatestWaWebVersion,
   getContentType,
   isJidBroadcast,
   isJidNewsletter,
@@ -161,11 +163,34 @@ export function saveChatNames(account, chats) {
   }
 }
 
+// WhatsApp rejects clients that announce an outdated WhatsApp Web version (the socket
+// closes straight away with "Connection Terminated"), so ask for the current one.
+// WA_VERSION=2,3000,1012345678 overrides it if ever needed.
+let waVersion
+async function currentWaVersion() {
+  if (process.env.WA_VERSION) return process.env.WA_VERSION.split(',').map(Number)
+  if (waVersion) return waVersion
+  for (const fetcher of [fetchLatestWaWebVersion, fetchLatestBaileysVersion]) {
+    try {
+      const { version, error } = await fetcher()
+      if (version && !error) {
+        waVersion = version
+        console.log(`Using WhatsApp Web version ${version.join('.')}`)
+        return waVersion
+      }
+    } catch {}
+  }
+  console.log('Could not look up the current WhatsApp Web version; using the built-in one')
+  return undefined
+}
+
 async function connect(account, attempt = 0) {
   const { state, saveCreds } = await useMultiFileAuthState(join(DATA_DIR, 'auth', account))
   const phone = (process.env[`WA_PHONE_${account.toUpperCase()}`] || '').replace(/\D/g, '')
 
+  const version = await currentWaVersion()
   const sock = makeWASocket({
+    ...(version ? { version } : {}),
     auth: state,
     logger,
     browser: Browsers.macOS('Desktop'),   // "Desktop" gets a fuller history sync on first link
@@ -217,8 +242,9 @@ async function connect(account, attempt = 0) {
         console.error(`[${account}] LOGGED OUT. Remove ${join(DATA_DIR, 'auth', account)} and restart to re-link.`)
         return
       }
-      const reason = String(lastDisconnect?.error?.message || code)
+      const reason = `${lastDisconnect?.error?.message || 'closed'} (code ${code})`
       setStatus(account, 'reconnecting', reason)
+      if (code === 405 || code === 426) waVersion = undefined   // version rejected: look it up again
       console.log(`[${account}] disconnected (${reason}); retrying`)
       const delay = Math.min(60_000, 2_000 * 2 ** attempt)
       setTimeout(() => connect(account, attempt + 1).catch(console.error), delay)
