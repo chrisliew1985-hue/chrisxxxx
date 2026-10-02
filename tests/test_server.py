@@ -58,8 +58,11 @@ def test_pending_then_results_round_trip(api):
     ]}, now=NOW)
 
     assert reply["errors"] == [] and reply["unanswered"] == []
-    assert reply["calendar"] == [{"action": "added/updated", "title": "[Client] Viewing Mont Kiara",
-                                  "start": "2026-10-03T15:00"}]
+    [action] = reply["calendar"]
+    assert (action["action"], action["title"], action["start"], action["end"]) == (
+        "upsert", "[Client] Viewing Mont Kiara", "2026-10-03T15:00:00+08:00",
+        "2026-10-03T16:00:00+08:00")
+    assert reply["calendar_mode"] == "apple"
     rows = {r["name"]: r for r in reply["crm"]}
     assert rows["Mr Tan (Mont Kiara)"]["type"] == "Client"
     assert rows["Mr Tan (Mont Kiara)"]["next_appointment"] == "2026-10-03T15:00"
@@ -103,3 +106,38 @@ def test_http_requires_token(api, tmp_path):
         assert "batch_id" in json.load(ok)
     finally:
         server.shutdown()
+
+
+@needs_collector
+def test_google_mode_remembers_event_ids(tmp_path, collector_db):  # noqa: F811
+    import sqlite3
+    cfg = Config(timezone="Asia/Kuala_Lumpur", accounts={"whatsapp": None}, source="cloud",
+                 cloud_db_path=str(collector_db), state_path=str(tmp_path / "state.db"))
+    api = Api(cfg, State(cfg.state_path))           # no iCloud -> Google mode
+    batch = api.pending(now=NOW)
+    assert batch["calendar_mode"] == "google"
+    tan = next(c for c in batch["chats"] if c["name"].startswith("Mr Tan"))
+    appt = {"status": "confirmed", "title": "Viewing", "start": "2026-10-03T15:00",
+            "duration_minutes": 60, "location": "Mont Kiara", "notes": None, "replaces_start": None}
+    reply = api.results({"batch_id": batch["batch_id"], "results": [
+        {"id": tan["id"], "analysis": analysis("client", [appt])}]}, now=NOW)
+    [created] = reply["calendar"]
+    assert created["event_id"] is None              # new: the Routine creates it
+    api.calendar_ids({"ids": {created["uid"]: "gcal123"}})
+
+    # A new message moves the viewing; the Routine is told which Google event to remove.
+    db = sqlite3.connect(collector_db)
+    db.execute("INSERT INTO messages VALUES ('whatsapp', '60123456789@s.whatsapp.net', 'x9', ?,"
+               " 0, 'Tan', 'Can change to Sunday 11am?')", (int(NOW.timestamp()) + 3600,))
+    db.commit()
+    db.close()
+    later = NOW + timedelta(hours=2)
+    batch = api.pending(now=later)
+    tan = next(c for c in batch["chats"] if c["name"].startswith("Mr Tan"))
+    assert "2026-10-03T15:00 [Client] Viewing" in tan["transcript"]   # Claude sees the old time
+    moved = dict(appt, start="2026-10-04T11:00", replaces_start="2026-10-03T15:00")
+    reply = api.results({"batch_id": batch["batch_id"], "results": [
+        {"id": tan["id"], "analysis": analysis("client", [moved])}]}, now=later)
+    delete, upsert = reply["calendar"]
+    assert (delete["action"], delete["event_id"]) == ("delete", "gcal123")
+    assert (upsert["action"], upsert["start"]) == ("upsert", "2026-10-04T11:00:00+08:00")

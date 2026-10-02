@@ -2,7 +2,7 @@
 
 A daily job that **only reads** your WhatsApp and WhatsApp Business chats (it never sends anything), then:
 
-1. **Adds CONFIRMED appointments to Apple Calendar** (iCloud), with a reminder 1 hour before. Examples are viewings, meetings, signing and handover.
+1. **Adds CONFIRMED appointments to Google Calendar**, with a reminder 1 hour before. Examples are viewings, meetings, signing and handover. If you add your Google account on your iPhone/Mac, the events also show in the Apple Calendar app. Writing to iCloud directly is optional.
    - Tentative proposals are skipped. Only clear agreement on a date and time counts.
    - If someone moves an appointment, the old event is replaced. If they cancel it, the event is removed.
    - It reads English, Malay and Chinese.
@@ -14,15 +14,16 @@ A daily job that **only reads** your WhatsApp and WhatsApp Business chats (it ne
 
 ```
 Phones ──(linked device)──► Free cloud server ── saves messages 24/7
-                                  ▲   │ writes confirmed appointments ──► Apple Calendar
-     every day 21:00              │   │
-     Claude Routine (your plan) ──┘   └ returns contacts ──► Claude Routine ──► Notion CRM
+                                  ▲   │ returns confirmed appointments + contacts
+     every day 21:00              │   ▼
+     Claude Routine (your plan) ──┴── adds events ──► Google Calendar
+                                      updates rows ─► Notion CRM
 ```
 
 ## Option A: Free cloud setup (recommended: no API keys, laptop can be off)
 
-- **Server:** an Oracle Cloud *Always Free* server keeps both WhatsApps linked as **linked devices**, like WhatsApp Web, and writes confirmed appointments into Apple Calendar.
-- **AI:** a daily **Claude Routine** on your existing Claude plan reads the new chats and updates Notion through your Notion connection.
+- **Server:** your VPS, or an Oracle Cloud *Always Free* server, keeps both WhatsApps linked as **linked devices**, like WhatsApp Web.
+- **AI:** a daily **Claude Routine** on your existing Claude plan reads the new chats. It adds confirmed appointments through your **Google Calendar** connection and updates the CRM through your **Notion** connection.
 - **Extra cost:** $0.
 
 > Linking a server as a device uses an unofficial WhatsApp Web library ([Baileys](https://github.com/WhiskeySockets/Baileys)). It only reads and behaves like a normal WhatsApp Web session, so the risk is low, but WhatsApp does not officially support it. The server stores your chat text, so keep the server account private. You can unlink it any time on your phone under *Settings → Linked devices*.
@@ -51,8 +52,8 @@ On the server (as `root` or a sudo user), run:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/chrisliew1985-hue/chrisxxxx/claude/relaxed-ride-lkxwvs/scripts/setup_server.sh | bash
 ```
-- It asks for your Apple ID, your **iCloud app-specific password** and your two WhatsApp numbers, e.g. `60123456789`.
-- Passwords are typed on the server only. They never go into GitHub or a chat.
+- It asks for your two WhatsApp numbers, e.g. `60123456789`. Local `012…` numbers are accepted too.
+- To use Apple Calendar instead of Google, run it with `CALENDAR=apple` (`curl … | CALENDAR=apple bash`). It then also asks for your Apple ID and an iCloud app-specific password. Those are typed on the server only and never go into GitHub or a chat.
 - It installs everything, sets up HTTPS, and starts the server.
 
 ### 3. Link both WhatsApps (one time)
@@ -72,7 +73,7 @@ In your Claude cloud environment settings (environment menu → **Edit**):
   - `WA_SERVER_TOKEN`: the output of `sudo cat ~/wa-crm/data/server_token` on the server. Type it into the settings; don't paste it into a chat.
 - **Network access:** add the `…sslip.io` domain to the allowed domains.
 
-Then create a daily Routine at 21:00 with the Notion connector and the prompt in [`docs/routine_prompt.md`](docs/routine_prompt.md). Claude can create it for you once the server is running.
+Then create a daily Routine at 21:00 with the Notion and Google Calendar connectors and the prompt in [`docs/routine_prompt.md`](docs/routine_prompt.md). Claude can create it for you once the server is running.
 
 **If a WhatsApp gets unlinked**, the Routine's daily summary will warn you. To fix it, run `sudo rm -rf ~/wa-crm/data/auth/business`, restart the container, and link again.
 
@@ -96,7 +97,7 @@ If you set `ANTHROPIC_API_KEY`, the container calls Claude itself every day at `
 
 ## Day-to-day
 
-- Appointments go into a separate calendar called **"WhatsApp Appointments"**, so you can tell them apart or hide them. Titles start with `[Client]`, `[Owner]` or `[Agent]`. Each event's notes include the contact's details, a `wa.me` link and the potential rating.
+- Appointments go into your main Google Calendar, or into a separate **"WhatsApp Appointments"** calendar in Apple mode. Titles start with `[Client]`, `[Owner]` or `[Agent]`. Each event's notes include the contact's details, a `wa.me` link and the potential rating.
 - If the AI gets a contact wrong in Notion, fix it and tick **Lock** on that contact. Future runs will then leave its Type, Potential and Role alone.
 - Each run only looks at messages that arrived since the last run. Claude also sees up to 30 days of earlier chat as context. Re-running is safe: events are matched by a stable ID, so nothing gets duplicated.
 - Group chats are skipped by default. To include agent co-broke groups, set `WA_CRM_INCLUDE_GROUPS=true` in the cloud, or `include_groups: true` in `config.yaml` on a Mac.

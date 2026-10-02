@@ -15,6 +15,10 @@ CREATE TABLE IF NOT EXISTS chat_watermark (
     account TEXT, chat_jid TEXT, processed_until TEXT NOT NULL,
     PRIMARY KEY (account, chat_jid)
 );
+CREATE TABLE IF NOT EXISTS calendar_ids (
+    uid TEXT PRIMARY KEY,
+    event_id TEXT NOT NULL        -- the event's ID in Google Calendar
+);
 CREATE TABLE IF NOT EXISTS appointments (
     uid TEXT PRIMARY KEY,
     account TEXT NOT NULL,
@@ -67,6 +71,14 @@ class State:
             sql += " AND account = ?"
             args.append(account)
         return [dict(r) for r in self.db.execute(sql + " ORDER BY start", args)]
+
+    def calendar_id(self, uid: str) -> str | None:
+        row = self.db.execute("SELECT event_id FROM calendar_ids WHERE uid = ?", (uid,)).fetchone()
+        return row[0] if row else None
+
+    def set_calendar_id(self, uid: str, event_id: str) -> None:
+        self.db.execute("INSERT OR REPLACE INTO calendar_ids VALUES (?, ?)", (uid, event_id))
+        self.db.commit()
 
     def get(self, uid: str) -> dict | None:
         row = self.db.execute("SELECT * FROM appointments WHERE uid = ?", (uid,)).fetchone()

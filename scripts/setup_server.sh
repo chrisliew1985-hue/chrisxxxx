@@ -56,15 +56,30 @@ if [ -d "$DIR/.git" ]; then git -C "$DIR" pull --ff-only; else git clone -b "$BR
 cd "$DIR"
 
 # A half-written .env from an interrupted run is redone.
-if [ -f .env ] && ! grep -q '^ICLOUD_APP_PASSWORD=.' .env; then rm -f .env; fi
+if [ -f .env ] && ! grep -Eq '^WA_PHONE_BUSINESS=[0-9]{8,15}$' .env; then rm -f .env; fi
 if [ ! -f .env ]; then
   echo "== Settings (stored only in $DIR/.env on this server) =="
   IP="$(curl -fsS https://api.ipify.org)"
   # Read answers from the keyboard, not from the piped script (curl ... | bash).
-  read -rp "Apple ID email for iCloud Calendar: " APPLE_ID </dev/tty
-  read -rsp "iCloud app-specific password (hidden): " APPLE_PW </dev/tty; echo
-  read -rp "First WhatsApp number, e.g. 60123456789: " PHONE_WA </dev/tty
-  read -rp "Second WhatsApp number, e.g. 60198765432: " PHONE_BIZ </dev/tty
+  ask_number() {   # keeps asking until it gets digits only, e.g. 60123456789
+    local n
+    while true; do
+      read -rp "$1" n </dev/tty
+      n="${n//[^0-9]/}"
+      [[ "$n" == 0* ]] && n="6$n"          # Malaysian 01x... -> 601x...
+      [[ "$n" =~ ^[0-9]{8,15}$ ]] && { echo "$n"; return; }
+      echo "  Please enter digits only, with country code, e.g. 60123456789" >/dev/tty
+    done
+  }
+  PHONE_WA="$(ask_number "First WhatsApp number, e.g. 60123456789: ")"
+  PHONE_BIZ="$(ask_number "Second WhatsApp number, e.g. 60198765432: ")"
+  # Calendar: Google by default (written by the Claude Routine). Run with CALENDAR=apple
+  # to have this server write Apple Calendar instead (asks for an iCloud app password).
+  APPLE_ID=""; APPLE_PW=""
+  if [ "${CALENDAR:-google}" = "apple" ]; then
+    read -rp "Apple ID email for iCloud Calendar: " APPLE_ID </dev/tty
+    read -rsp "iCloud app-specific password (hidden): " APPLE_PW </dev/tty; echo
+  fi
   cat > .env <<ENV
 DOMAIN=${IP//./-}.sslip.io
 WA_CRM_TIMEZONE=Asia/Kuala_Lumpur

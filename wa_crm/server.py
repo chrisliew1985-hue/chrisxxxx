@@ -3,9 +3,13 @@
 The Routine (running on the user's Claude plan, no API key) calls:
 
   GET  /pending?limit=15   -> new chats to read, plus the rules and the answer format
-  POST /results            -> Claude's analysis per chat; the server writes confirmed
-                              appointments to Apple Calendar and returns CRM rows,
-                              which the Routine saves to Notion via its connector.
+  POST /results            -> Claude's analysis per chat. The server works out the
+                              calendar changes and CRM rows and returns them; the
+                              Routine applies them to Google Calendar and Notion via
+                              its connectors (or, with iCloud credentials set, the
+                              server writes Apple Calendar itself).
+  POST /calendar-ids       -> {"ids": {"<uid>": "<Google event id>"}} after creating
+                              events, so later moves/cancellations hit the same event.
 
 Every request needs  Authorization: Bearer <token>.  The token is generated on
 first start, saved in /data/server_token and printed in the logs.
@@ -45,18 +49,30 @@ Dates in `start` / `replaces_start` are local time, format YYYY-MM-DDTHH:MM."""
 
 
 class RecordingCalendar:
-    """Wraps the real calendar and remembers what was done, for the reply."""
+    """Records calendar changes for the reply, and forwards them to iCloud if configured.
 
-    def __init__(self, inner):
-        self.inner, self.actions = inner, []
+    In Google mode (inner is None) the Routine applies the changes itself, using
+    `event_id` to update or delete the event it created earlier.
+    """
+
+    def __init__(self, inner, state: State, tz: ZoneInfo):
+        self.inner, self.state, self.tz, self.actions = inner, state, tz, []
 
     def upsert(self, uid, title, start_iso, duration_minutes, location, description):
-        self.inner.upsert(uid, title, start_iso, duration_minutes, location, description)
-        self.actions.append({"action": "added/updated", "title": title, "start": start_iso})
+        if self.inner:
+            self.inner.upsert(uid, title, start_iso, duration_minutes, location, description)
+        start = datetime.fromisoformat(start_iso).replace(tzinfo=self.tz)
+        end = start + timedelta(minutes=max(duration_minutes, 15))
+        self.actions.append({
+            "action": "upsert", "uid": uid, "event_id": self.state.calendar_id(uid),
+            "title": title, "start": start.isoformat(), "end": end.isoformat(),
+            "location": location, "description": description,
+        })
 
     def delete(self, uid):
-        self.inner.delete(uid)
-        self.actions.append({"action": "removed", "uid": uid})
+        if self.inner:
+            self.inner.delete(uid)
+        self.actions.append({"action": "delete", "uid": uid, "event_id": self.state.calendar_id(uid)})
 
 
 class NullCRM:
@@ -67,17 +83,20 @@ class NullCRM:
 
 
 class Api:
-    def __init__(self, cfg: Config, state: State, calendar_factory):
+    def __init__(self, cfg: Config, state: State, calendar_factory=None):
+        """calendar_factory: returns an ICloudCalendar, or None for Google mode."""
         self.cfg = cfg
         self.tz = ZoneInfo(cfg.timezone)
         self.state = state
         self.calendar_factory = calendar_factory
+        self.calendar_mode = "apple" if calendar_factory else "google"
         self.batches: dict[str, dict] = {}
 
     def pending(self, limit: int = 15, now: datetime | None = None) -> dict:
         now = now or datetime.now(timezone.utc)
         self._expire(now)
-        in_flight = {key for b in self.batches.values() for key in b["keys"]}
+        # Chats handed out but not answered yet aren't handed out twice.
+        in_flight = {(c.account, c.jid) for b in self.batches.values() for c in b["chats"].values()}
 
         candidates = []
         for account in self.cfg.accounts:
@@ -107,12 +126,13 @@ class Api:
                 "transcript": _format_chat(chat, new_since, self.tz, known),
             })
         self.batches[batch_id] = {
-            "created": now, "chats": entries, "keys": {(c.account, c.jid) for c in entries.values()},
+            "created": now, "chats": entries,
             # When this batch covers everything, finishing it moves the account watermark.
             "scan_time": now if remaining == 0 else None,
         }
         return {
             "batch_id": batch_id,
+            "calendar_mode": self.calendar_mode,
             "instructions": SYSTEM_PROMPT + "\n\n" + RESULT_INSTRUCTIONS,
             "result_schema": ChatAnalysis.model_json_schema(),
             "whatsapp_status": self._status(),
@@ -126,7 +146,8 @@ class Api:
         if batch is None:
             raise KeyError("Unknown or expired batch_id - call /pending again.")
 
-        calendar = RecordingCalendar(self.calendar_factory())
+        inner = self.calendar_factory() if self.calendar_factory else None
+        calendar = RecordingCalendar(inner, self.state, self.tz)
         runner = Runner(self.cfg, None, calendar, NullCRM(), self.state)
         crm_rows, errors = [], []
         for item in body.get("results", []):
@@ -155,8 +176,17 @@ class Api:
                     self.state.set_account_watermark(account, batch["scan_time"])
             self.batches.pop(body["batch_id"], None)
 
-        return {"calendar": calendar.actions, "crm": crm_rows, "errors": errors,
-                "unanswered": sorted(batch["chats"])}
+        return {"calendar_mode": self.calendar_mode, "calendar": calendar.actions,
+                "crm": crm_rows, "errors": errors, "unanswered": sorted(batch["chats"])}
+
+    def calendar_ids(self, body: dict) -> dict:
+        ids = body.get("ids") or {}
+        if not isinstance(ids, dict):
+            raise ValueError('expected {"ids": {"<uid>": "<event id>"}}')
+        for uid, event_id in ids.items():
+            if event_id:
+                self.state.set_calendar_id(str(uid), str(event_id))
+        return {"saved": len(ids)}
 
     def _status(self) -> dict:
         try:
@@ -212,11 +242,12 @@ def make_handler(api: Api, token: str):
         def do_POST(self):
             if not self._authorized():
                 return
-            if urlparse(self.path).path != "/results":
+            path = urlparse(self.path).path
+            if path not in ("/results", "/calendar-ids"):
                 return self._send(404, {"error": "not found"})
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
-                self._send(200, api.results(body))
+                self._send(200, api.results(body) if path == "/results" else api.calendar_ids(body))
             except KeyError as e:
                 self._send(409, {"error": str(e.args[0])})
             except (json.JSONDecodeError, ValueError) as e:
@@ -232,11 +263,14 @@ def serve_api(cfg: Config, port: int = 8080) -> None:
     data_dir = Path(cfg.cloud_db_path).parent
     token = load_token(data_dir, cfg.secret("WA_SERVER_TOKEN", required=False))
 
-    def calendar_factory():
-        return ICloudCalendar(cfg.secret("ICLOUD_APPLE_ID"), cfg.secret("ICLOUD_APP_PASSWORD"),
-                              cfg.calendar_name, cfg.timezone, cfg.alarm_minutes)
+    calendar_factory = None   # Google Calendar: the Routine writes events via its connector
+    if cfg.secret("ICLOUD_APP_PASSWORD", required=False):
+        def calendar_factory():
+            return ICloudCalendar(cfg.secret("ICLOUD_APPLE_ID"), cfg.secret("ICLOUD_APP_PASSWORD"),
+                                  cfg.calendar_name, cfg.timezone, cfg.alarm_minutes)
 
     api = Api(cfg, State(cfg.state_path), calendar_factory)
+    print(f"Calendar: {api.calendar_mode}", flush=True)
     print(f"API listening on :{port}. Token for the Claude Routine is saved in "
           f"{data_dir / 'server_token'} (show it with: docker compose exec wa-crm cat /data/server_token)",
           flush=True)

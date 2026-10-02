@@ -6,18 +6,18 @@ The Routine's cloud environment needs:
 - **Environment variables:** `WA_SERVER_URL` (e.g. `https://141-147-12-34.sslip.io`) and
   `WA_SERVER_TOKEN` (from `sudo cat ~/wa-crm/data/server_token` on the server).
 - **Network access:** your server's domain (e.g. `141-147-12-34.sslip.io`) added to the allowed domains.
-- **Connector:** Notion.
+- **Connectors:** Notion and Google Calendar.
 
 ---
 
 ```
-Daily WhatsApp → Apple Calendar + Notion CRM sync. You only READ chats; never send WhatsApp messages.
+Daily WhatsApp → Google Calendar + Notion CRM sync. You only READ chats; never send WhatsApp messages.
 Never print or echo $WA_SERVER_TOKEN.
 
 Server: $WA_SERVER_URL   Auth header: "Authorization: Bearer $WA_SERVER_TOKEN"
 Notion CRM data source: collection://bc45d57f-35f9-407f-8992-2ff6df80fd26  ("WhatsApp CRM")
 
-Repeat up to 10 rounds:
+Repeat steps 1-5 up to 10 rounds:
 1. curl -sf -H "Authorization: Bearer $WA_SERVER_TOKEN" "$WA_SERVER_URL/pending?limit=15" -o batch.json
    If "chats" is empty, stop looping.
 2. Read batch.json. Follow its "instructions" exactly. For every chat, read the whole "transcript"
@@ -26,9 +26,21 @@ Repeat up to 10 rounds:
 3. Write {"batch_id": ..., "results": [{"id": ..., "analysis": {...}}, ...]} to results.json and
    curl -sf -X POST -H "Authorization: Bearer $WA_SERVER_TOKEN" -H "Content-Type: application/json"
         --data @results.json "$WA_SERVER_URL/results" -o reply.json
-   The server writes confirmed appointments to Apple Calendar itself.
    If reply.json has "errors", fix those analyses and POST just those ids again (same batch_id).
-4. For each row in reply.json "crm", upsert into the Notion CRM:
+4. Calendar: if reply.json "calendar_mode" is "google", apply each item in "calendar" to the
+   PRIMARY Google Calendar, in order:
+   - "upsert" with event_id null  -> create_event (summary=title, startTime=start, endTime=end,
+     location, description, timeZone Asia/Kuala_Lumpur, popup reminder 60 minutes before).
+     Collect {uid: new event id}.
+   - "upsert" with an event_id    -> update_event on that eventId with the same fields.
+   - "delete" with an event_id    -> delete_event on that eventId (skip if already gone).
+   - "delete" with event_id null  -> nothing to do.
+   Never send invitations or emails to anyone (notificationLevel NONE, no attendees).
+   Then save the new ids:
+   curl -sf -X POST -H "Authorization: Bearer $WA_SERVER_TOKEN" -H "Content-Type: application/json"
+        --data '{"ids": {"<uid>": "<event id>", ...}}' "$WA_SERVER_URL/calendar-ids"
+   (If "calendar_mode" is "apple", the server already wrote Apple Calendar; skip this step.)
+5. For each row in reply.json "crm", upsert into the Notion CRM:
    - Find the page whose "WhatsApp ID" equals whatsapp_id.
    - Set Name, Phone, WhatsApp ID, Summary, Potential Reason, Last Contact (date only),
      Requirements / Properties / Next Step (only if not null), Next Appointment
