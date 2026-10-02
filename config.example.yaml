@@ -1,0 +1,21 @@
+# Copy to ~/.wa-crm/config.yaml and adjust.
+
+# Your local timezone (used to read "tomorrow 3pm" etc. and for calendar times).
+timezone: Asia/Kuala_Lumpur
+
+# The two WhatsApp apps on this Mac. Leave the value empty to use the default
+# location; remove a line if you only use one app.
+accounts:
+  whatsapp:      # regular WhatsApp
+  business:      # WhatsApp Business
+
+include_groups: false         # true = also read group chats (e.g. agent co-broke groups)
+first_run_lookback_days: 3    # how far back the very first run looks for new messages
+context_days: 30              # older history shown to Claude so it understands each chat
+
+calendar_name: WhatsApp Appointments   # created in iCloud if it doesn't exist
+alarm_minutes: 60                       # reminder before each appointment (null = none)
+
+crm_backend: notion           # notion | csv
+crm_csv_path: ~/.wa-crm/contacts.csv
+crm_include_personal: false   # true = also log friends/family/vendors in the CRM
