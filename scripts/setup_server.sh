@@ -55,13 +55,16 @@ echo "== Downloading wa-crm =="
 if [ -d "$DIR/.git" ]; then git -C "$DIR" pull --ff-only; else git clone -b "$BRANCH" "$REPO_URL" "$DIR"; fi
 cd "$DIR"
 
+# A half-written .env from an interrupted run is redone.
+if [ -f .env ] && ! grep -q '^ICLOUD_APP_PASSWORD=.' .env; then rm -f .env; fi
 if [ ! -f .env ]; then
   echo "== Settings (stored only in $DIR/.env on this server) =="
   IP="$(curl -fsS https://api.ipify.org)"
-  read -rp "Apple ID email for iCloud Calendar: " APPLE_ID
-  read -rsp "iCloud app-specific password (hidden): " APPLE_PW; echo
-  read -rp "Regular WhatsApp number, e.g. 60123456789: " PHONE_WA
-  read -rp "WhatsApp Business number, e.g. 60198765432: " PHONE_BIZ
+  # Read answers from the keyboard, not from the piped script (curl ... | bash).
+  read -rp "Apple ID email for iCloud Calendar: " APPLE_ID </dev/tty
+  read -rsp "iCloud app-specific password (hidden): " APPLE_PW </dev/tty; echo
+  read -rp "First WhatsApp number, e.g. 60123456789: " PHONE_WA </dev/tty
+  read -rp "Second WhatsApp number, e.g. 60198765432: " PHONE_BIZ </dev/tty
   cat > .env <<ENV
 DOMAIN=${IP//./-}.sslip.io
 WA_CRM_TIMEZONE=Asia/Kuala_Lumpur
