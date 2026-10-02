@@ -1,8 +1,25 @@
-# For a VPS (Hetzner, DigitalOcean, Lightsail...):  docker compose up -d
+# Free server (Oracle Cloud "Always Free" or any VPS):
+#   ./scripts/setup_server.sh      (does all of this for you)
 services:
   wa-crm:
     build: .
     restart: unless-stopped
-    env_file: .env          # copy .env.example to .env and fill it in
+    env_file: .env
     volumes:
       - ./data:/data
+    expose:
+      - "8080"            # only reachable through Caddy below, never directly
+
+  # HTTPS in front of the API so chats are encrypted on the way to the Claude Routine.
+  # DOMAIN is e.g. 141-147-12-34.sslip.io (a free name that points at your server's IP).
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    command: caddy reverse-proxy --from ${DOMAIN:?set DOMAIN in .env} --to wa-crm:8080
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy:/data       # keeps the HTTPS certificate across restarts
+    depends_on:
+      - wa-crm

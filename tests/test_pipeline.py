@@ -123,7 +123,8 @@ class FakeCRM:
 
 def analysis(contact_type="client", appointments=(), potential="hot"):
     return ChatAnalysis(
-        contact_type=contact_type, client_role="buyer" if contact_type == "client" else None,
+        contact_type=contact_type,
+        role={"client": "buyer", "owner": "landlord"}.get(contact_type),
         potential=potential, potential_reason="Viewing booked, budget clear",
         summary="Buyer for Mont Kiara condo", requirements="3 rooms, RM1.2m",
         next_step="Prepare viewing", appointments=list(appointments))
@@ -148,7 +149,7 @@ def test_confirmed_appointment_goes_to_calendar_and_crm(tmp_path, wa_db):
     assert cal.events == {uid: ("[Client] Viewing Mont Kiara w/ Mr Tan", "2026-10-03T15:00",
                                 "Mont Kiara")}
     rec = crm.records[0]
-    assert (rec.type, rec.potential, rec.client_role) == ("Client", "Hot", "Buyer")
+    assert (rec.type, rec.potential, rec.role) == ("Client", "Hot", "Buyer")
     assert rec.phone == "+60123456789"
     assert rec.next_appointment == "2026-10-03T15:00"
     assert stats == {"chats": 1, "events_added": 1, "events_removed": 0, "contacts": 1,
@@ -194,7 +195,16 @@ def test_personal_contacts_stay_out_of_crm(tmp_path, wa_db):
 def test_agent_is_labelled_agent(tmp_path, wa_db):
     runner, _, _, crm = make_runner(tmp_path, wa_db, [analysis("agent", potential="warm")])
     runner.run(now=NOW)
-    assert (crm.records[0].type, crm.records[0].client_role) == ("Agent", None)
+    assert (crm.records[0].type, crm.records[0].role) == ("Agent", None)
+
+
+def test_owner_is_labelled_owner(tmp_path, wa_db):
+    appt = Appointment(status="confirmed", title="Handover keys", start="2026-10-04T10:00",
+                       duration_minutes=30)
+    runner, _, cal, crm = make_runner(tmp_path, wa_db, [analysis("owner", [appt], "warm")])
+    runner.run(now=NOW)
+    assert (crm.records[0].type, crm.records[0].role) == ("Owner", "Landlord")
+    assert [v[0] for v in cal.events.values()] == ["[Owner] Handover keys"]
 
 
 def test_failed_chat_is_retried_next_run(tmp_path, wa_db):

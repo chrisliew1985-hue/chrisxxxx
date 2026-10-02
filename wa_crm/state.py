@@ -30,7 +30,8 @@ class State:
     def __init__(self, path: str | Path):
         path = Path(path).expanduser()
         path.parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(path)
+        # The API server is single-threaded but may run off the main thread.
+        self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
 

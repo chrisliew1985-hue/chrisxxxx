@@ -2,7 +2,8 @@
 
     python -m wa_crm run              # normal daily run
     python -m wa_crm run --dry-run    # show what would happen, change nothing
-    python -m wa_crm serve            # cloud: stay running and do a run every day at run_at
+    python -m wa_crm serve            # cloud + API key: run every day at run_at
+    python -m wa_crm api              # cloud, no API key: a daily Claude Routine does the AI part
     python -m wa_crm setup-notion --parent-page <page id>
 """
 
@@ -27,7 +28,9 @@ from .whatsapp import Chat
 
 log = logging.getLogger("wa_crm")
 
-TYPE_LABEL = {"client": "Client", "agent": "Agent", "personal": "Personal", "other": "Other"}
+TYPE_LABEL = {"client": "Client", "owner": "Owner", "agent": "Agent", "personal": "Personal",
+              "other": "Other"}
+CRM_TYPES = ("client", "owner", "agent")
 
 
 class Runner:
@@ -108,29 +111,36 @@ class Runner:
         analysis = self.extractor.analyze(chat, new_since, known)
         if analysis is None:
             return
+        self.apply_analysis(chat, analysis, now)
 
+    def apply_analysis(self, chat: Chat, analysis: ChatAnalysis, now: datetime) -> ContactRecord | None:
+        """Write appointments to the calendar and the contact to the CRM."""
         self.sync_appointments(chat, analysis)
 
-        if analysis.contact_type in ("client", "agent") or self.cfg.crm_include_personal:
+        if analysis.contact_type in CRM_TYPES or self.cfg.crm_include_personal:
+            now_local = now.astimezone(self.tz).strftime("%Y-%m-%dT%H:%M")
             upcoming = self.state.upcoming(chat.jid, now_local)
             record = ContactRecord(
                 whatsapp_id=chat.jid,
                 name=chat.name,
                 phone=chat.phone,
                 type=TYPE_LABEL[analysis.contact_type],
-                client_role=(analysis.client_role or "unknown").capitalize()
-                if analysis.contact_type == "client" else None,
+                role=(analysis.role or "unknown").capitalize()
+                if analysis.contact_type in ("client", "owner") else None,
                 potential=analysis.potential.capitalize(),
                 potential_reason=analysis.potential_reason,
                 summary=analysis.summary,
                 requirements=analysis.requirements,
                 next_step=analysis.next_step,
+                properties=analysis.properties,
                 last_contact=chat.last_timestamp.astimezone(self.tz).date().isoformat(),
                 accounts=[chat.account],
                 next_appointment=upcoming[0]["start"] if upcoming else None,
             )
             self.crm.upsert(record)
             self.stats["contacts"] += 1
+            return record
+        return None
 
     def sync_appointments(self, chat: Chat, analysis: ChatAnalysis) -> None:
         label = TYPE_LABEL[analysis.contact_type]
@@ -159,12 +169,12 @@ class Runner:
                                                     appt.title, "cancelled")
                 continue
 
-            title = f"[{label}] {appt.title}" if label in ("Client", "Agent") else appt.title
+            title = f"[{label}] {appt.title}" if label in ("Client", "Owner", "Agent") else appt.title
             description = "\n".join(filter(None, [
                 f"Contact: {chat.name}" + (f" ({chat.phone})" if chat.phone else ""),
                 f"WhatsApp: https://wa.me/{chat.phone.lstrip('+')}" if chat.phone else None,
                 f"Via: {chat.account}",
-                f"Type: {label}" + (f" / {analysis.client_role}" if analysis.client_role else ""),
+                f"Type: {label}" + (f" / {analysis.role}" if analysis.role else ""),
                 f"Potential: {analysis.potential}",
                 appt.notes and f"\n{appt.notes}",
                 "\nAdded automatically from WhatsApp by wa-crm.",
@@ -209,6 +219,8 @@ def main(argv: list[str] | None = None) -> int:
     serve_p = sub.add_parser("serve", help="Run forever, processing once a day at run_at (cloud)")
     serve_p.add_argument("--run-now", choices=["dry", "real"],
                          help="Also do one run immediately on start (dry = preview only)")
+    api_p = sub.add_parser("api", help="Serve chats to a daily Claude Routine (no API key needed)")
+    api_p.add_argument("--port", type=int, default=8080)
     notion = sub.add_parser("setup-notion", help="Create the CRM database in Notion")
     notion.add_argument("--parent-page", required=True, help="ID of the Notion page to put it in")
     args = parser.parse_args(argv)
@@ -220,6 +232,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "setup-notion":
         db_id = NotionCRM.create_database(cfg.secret("NOTION_TOKEN"), args.parent_page)
         print(f"Created Notion database. Add this line to ~/.wa-crm/.env:\nNOTION_DATABASE_ID={db_id}")
+        return 0
+
+    if args.cmd == "api":
+        from .server import serve_api
+        serve_api(cfg, port=args.port)
         return 0
 
     if args.cmd == "serve":

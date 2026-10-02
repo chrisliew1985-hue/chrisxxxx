@@ -17,8 +17,8 @@ class ContactRecord:
     whatsapp_id: str            # chat JID, the unique key
     name: str
     phone: str | None
-    type: str                   # Client / Agent / Personal / Other
-    client_role: str | None     # Buyer / Tenant / Owner / Landlord / Investor
+    type: str                   # Client / Owner / Agent / Personal / Other
+    role: str | None            # Buyer / Tenant / Investor (clients), Seller / Landlord (owners)
     potential: str              # Hot / Warm / Cold / None
     potential_reason: str
     summary: str
@@ -27,16 +27,18 @@ class ContactRecord:
     last_contact: str           # YYYY-MM-DD
     accounts: list[str]         # which WhatsApp(s) this contact talks to
     next_appointment: str | None  # YYYY-MM-DDTHH:MM local
+    properties: str | None = None  # units listed (owners) / viewed (clients)
 
 
 # ---------------------------------------------------------------- Notion
 
 NOTION_VERSION = "2022-06-28"
 
-TYPE_OPTIONS = [("Client", "green"), ("Agent", "blue"), ("Personal", "gray"), ("Other", "default")]
+TYPE_OPTIONS = [("Client", "green"), ("Owner", "purple"), ("Agent", "blue"), ("Personal", "gray"),
+                ("Other", "default")]
 POTENTIAL_OPTIONS = [("Hot", "red"), ("Warm", "orange"), ("Cold", "blue"), ("None", "gray")]
-ROLE_OPTIONS = [("Buyer", "green"), ("Tenant", "yellow"), ("Owner", "purple"),
-                ("Landlord", "brown"), ("Investor", "pink"), ("Unknown", "gray")]
+ROLE_OPTIONS = [("Buyer", "green"), ("Tenant", "yellow"), ("Investor", "pink"),
+                ("Seller", "purple"), ("Landlord", "brown"), ("Unknown", "gray")]
 
 
 def _select(options):
@@ -47,7 +49,8 @@ NOTION_SCHEMA = {
     "Name": {"title": {}},
     "Type": _select(TYPE_OPTIONS),
     "Potential": _select(POTENTIAL_OPTIONS),
-    "Client Role": _select(ROLE_OPTIONS),
+    "Role": _select(ROLE_OPTIONS),
+    "Properties": {"rich_text": {}},
     "Phone": {"phone_number": {}},
     "WhatsApp ID": {"rich_text": {}},
     "WhatsApp Account": {"multi_select": {"options": [
@@ -70,7 +73,7 @@ class NotionCRM:
     """Upserts one Notion page per WhatsApp contact.
 
     Tick the "Lock" checkbox on a contact in Notion to stop the tool from
-    overwriting its Type / Potential / Client Role (useful after a manual fix).
+    overwriting its Type / Potential / Role (useful after a manual fix).
     """
 
     def __init__(self, token: str, database_id: str, timezone: str):
@@ -126,6 +129,8 @@ class NotionCRM:
             props["Phone"] = {"phone_number": rec.phone}
         if rec.requirements:
             props["Requirements"] = _text(rec.requirements)
+        if rec.properties:
+            props["Properties"] = _text(rec.properties)
         if rec.next_step:
             props["Next Step"] = _text(rec.next_step)
         if rec.next_appointment:
@@ -134,8 +139,8 @@ class NotionCRM:
         if not locked:
             props["Type"] = {"select": {"name": rec.type}}
             props["Potential"] = {"select": {"name": rec.potential}}
-            if rec.client_role:
-                props["Client Role"] = {"select": {"name": rec.client_role}}
+            if rec.role:
+                props["Role"] = {"select": {"name": rec.role}}
 
         if existing:
             resp = self.http.patch(f"pages/{existing['id']}", json={"properties": props})
@@ -170,7 +175,7 @@ class CsvCRM:
         accounts = set(rec.accounts)
         if old:
             accounts |= set(filter(None, old.get("accounts", "").split(";")))
-            for key in ("requirements", "next_step", "next_appointment", "phone"):
+            for key in ("requirements", "properties", "next_step", "next_appointment", "phone"):
                 row[key] = row[key] or old.get(key) or None
         row["accounts"] = ";".join(sorted(accounts))
         rows[rec.whatsapp_id] = row

@@ -35,13 +35,19 @@ class Appointment(BaseModel):
 
 
 class ChatAnalysis(BaseModel):
-    contact_type: Literal["client", "agent", "personal", "other"] = Field(
-        description="client = buyer, tenant, owner, landlord, investor or anyone the user "
-        "serves directly. agent = another real-estate agent / negotiator / co-broke / "
-        "agency staff. personal = friends/family. other = vendors, spam, service providers."
+    contact_type: Literal["client", "owner", "agent", "personal", "other"] = Field(
+        description="client = buyer, tenant or investor looking for a property. "
+        "owner = property owner who wants to sell or rent out (seller / landlord). "
+        "agent = another real-estate agent / negotiator / co-broke / agency staff. "
+        "personal = friends/family. other = vendors, spam, service providers."
     )
-    client_role: Optional[Literal["buyer", "tenant", "owner", "landlord", "investor", "unknown"]] = Field(
-        None, description="Only for clients."
+    role: Optional[Literal["buyer", "tenant", "investor", "seller", "landlord", "unknown"]] = Field(
+        None, description="For clients: buyer / tenant / investor. For owners: seller / landlord. "
+        "Null for agents and others."
+    )
+    properties: Optional[str] = Field(
+        None, description="Properties involved: for owners, the unit(s) they list (project, "
+        "unit no., size, asking price/rent); for clients, units they viewed or are keen on."
     )
     potential: Literal["hot", "warm", "cold", "none"] = Field(
         description="hot = ready to act within ~2 weeks (viewing set, offer, budget + timing clear). "
