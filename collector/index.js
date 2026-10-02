@@ -149,8 +149,25 @@ function start(account, attempt = 0) {
     console.log(`[${account}] connected as ${client.info?.wid?.user || ''}`)
     backfill(account, client).catch(e => console.error(`[${account}] history failed: ${e.message}`))
   })
+  // If the full chat list can't be loaded (a known WhatsApp Web quirk), still give
+  // Claude context: the first time a chat gets a new message, load that chat's history.
+  const loadedChats = new Set()
+  async function loadChatHistory(msg) {
+    const key = msg.fromMe ? msg.to : msg.from
+    if (!key || loadedChats.has(key) || isIgnoredChat(key)) return
+    loadedChats.add(key)
+    const since = Date.now() / 1000 - HISTORY_DAYS * 86400
+    const chat = await msg.getChat()
+    const jid = await resolveJid(account, client, key)
+    if (chat?.name) store.saveName(account, jid, chat.name)
+    for (const m of await chat.fetchMessages({ limit: HISTORY_PER_CHAT })) {
+      if (m.timestamp >= since) await save(account, client, m)
+    }
+  }
+
   client.on('message_create', msg => {
     save(account, client, msg).catch(e => console.error(`[${account}] save failed: ${e.message}`))
+    loadChatHistory(msg).catch(e => console.error(`[${account}] chat history failed: ${e.message || e}`))
   })
   client.on('disconnected', async reason => {
     const loggedOut = String(reason).toUpperCase().includes('LOGOUT')
