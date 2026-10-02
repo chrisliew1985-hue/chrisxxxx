@@ -59,14 +59,24 @@ async function save(account, client, msg) {
   })
 }
 
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+
 // Load recent history (also fills any gap while the server or WhatsApp was down).
+// Right after linking, WhatsApp Web is still syncing and getChats() can fail, so retry.
 async function backfill(account, client) {
   const since = Date.now() / 1000 - HISTORY_DAYS * 86400
-  let chats = []
-  try {
-    chats = await client.getChats()
-  } catch (e) {
-    console.error(`[${account}] getChats failed: ${e.message}`)
+  let chats = null
+  for (const wait of [15_000, 30_000, 60_000, 120_000, 300_000]) {
+    await sleep(wait)
+    try {
+      chats = await client.getChats()
+      break
+    } catch (e) {
+      console.log(`[${account}] chat list not ready yet (${e.message || e}); retrying`)
+    }
+  }
+  if (!chats) {
+    console.error(`[${account}] could not load chat history; new messages are still saved`)
     return
   }
   let saved = 0
@@ -122,11 +132,11 @@ function start(account, attempt = 0) {
     store.setStatus(account, 'logged_out', `Login failed: ${m}`)
     console.error(`[${account}] login failed: ${m}`)
   })
-  client.on('ready', async () => {
+  client.on('ready', () => {
     attempt = 0
     store.setStatus(account, 'connected')
     console.log(`[${account}] connected as ${client.info?.wid?.user || ''}`)
-    await backfill(account, client)
+    backfill(account, client).catch(e => console.error(`[${account}] history failed: ${e.message}`))
   })
   client.on('message_create', msg => {
     save(account, client, msg).catch(e => console.error(`[${account}] save failed: ${e.message}`))
@@ -137,8 +147,10 @@ function start(account, attempt = 0) {
     console.error(`[${account}] disconnected: ${reason}`)
     try { await client.destroy() } catch {}
     if (loggedOut) {
-      console.error(`[${account}] Unlinked from the phone. To link again: ` +
-        `rm -rf ${join(DATA_DIR, 'wwebjs-auth', `session-${account}`)} and restart.`)
+      // Unlinked (or a pairing attempt was cancelled): start over so a fresh pairing
+      // code is shown. The status stays "logged_out" so the daily summary warns.
+      console.error(`[${account}] not linked; a new pairing code will follow`)
+      setTimeout(() => start(account, 0), 10_000)
       return
     }
     restart(account, attempt + 1)
@@ -158,6 +170,12 @@ function restart(account, attempt) {
   console.log(`[${account}] retrying in ${Math.round(delay / 1000)}s`)
   setTimeout(() => start(account, attempt), delay)
 }
+
+// whatsapp-web.js sometimes throws from inside the browser bridge (e.g. "Execution
+// context was destroyed" while WhatsApp Web reloads). Log it instead of crashing the
+// whole collector, which would also reset the other account's pairing.
+process.on('unhandledRejection', e => console.error('ignored error:', e?.message || e))
+process.on('uncaughtException', e => console.error('ignored error:', e?.message || e))
 
 console.log(`WhatsApp collector starting for: ${ACCOUNTS.join(', ')}`)
 setInterval(() => {}, 60_000)   // keep the process alive between restarts
