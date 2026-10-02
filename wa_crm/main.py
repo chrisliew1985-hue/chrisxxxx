@@ -2,6 +2,7 @@
 
     python -m wa_crm run              # normal daily run
     python -m wa_crm run --dry-run    # show what would happen, change nothing
+    python -m wa_crm serve            # cloud: stay running and do a run every day at run_at
     python -m wa_crm setup-notion --parent-page <page id>
 """
 
@@ -10,6 +11,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -19,8 +21,9 @@ from .calendar_icloud import DryRunCalendar, ICloudCalendar, event_uid
 from .config import Config, load_config
 from .crm import ContactRecord, CsvCRM, DryRunCRM, NotionCRM
 from .extract import ChatAnalysis, Extractor
+from . import cloud_store, whatsapp
 from .state import State
-from .whatsapp import Chat, read_chats
+from .whatsapp import Chat
 
 log = logging.getLogger("wa_crm")
 
@@ -40,6 +43,8 @@ class Runner:
 
     def run(self, now: datetime | None = None) -> dict:
         now = now or datetime.now(timezone.utc)
+        if self.cfg.source == "cloud":
+            self.check_collector()
         for account, db_path in self.cfg.accounts.items():
             try:
                 self.run_account(account, db_path, now)
@@ -48,9 +53,27 @@ class Runner:
                 self.stats["errors"] += 1
         return self.stats
 
+    def check_collector(self) -> None:
+        """Warn loudly when a WhatsApp account is no longer linked in the cloud."""
+        try:
+            status = cloud_store.account_status(self.cfg.cloud_db_path)
+        except FileNotFoundError as e:
+            log.error("%s", e)
+            return
+        for account in self.cfg.accounts:
+            state = status.get(account, {}).get("state", "never started")
+            if state != "connected":
+                self.stats["errors"] += 1
+                log.error("WhatsApp '%s' is %s - messages may be missing. %s", account, state,
+                          status.get(account, {}).get("detail") or "")
+
     def run_account(self, account: str, db_path: str, now: datetime) -> None:
         since = self.state.account_watermark(account) or (
             now - timedelta(days=self.cfg.first_run_lookback_days))
+        if self.cfg.source == "cloud":
+            read_chats, db_path = cloud_store.read_chats, self.cfg.cloud_db_path
+        else:
+            read_chats = whatsapp.read_chats
         chats = read_chats(account, db_path, active_since=since,
                            history_since=since - timedelta(days=self.cfg.context_days),
                            include_groups=self.cfg.include_groups)
@@ -183,6 +206,9 @@ def main(argv: list[str] | None = None) -> int:
     run = sub.add_parser("run", help="Process new WhatsApp messages")
     run.add_argument("--dry-run", action="store_true",
                      help="Print what would be added; don't touch calendar, CRM or state")
+    serve_p = sub.add_parser("serve", help="Run forever, processing once a day at run_at (cloud)")
+    serve_p.add_argument("--run-now", choices=["dry", "real"],
+                         help="Also do one run immediately on start (dry = preview only)")
     notion = sub.add_parser("setup-notion", help="Create the CRM database in Notion")
     notion.add_argument("--parent-page", required=True, help="ID of the Notion page to put it in")
     args = parser.parse_args(argv)
@@ -196,11 +222,49 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Created Notion database. Add this line to ~/.wa-crm/.env:\nNOTION_DATABASE_ID={db_id}")
         return 0
 
-    stats = build_runner(cfg, args.dry_run).run()
+    if args.cmd == "serve":
+        if args.run_now:
+            try:
+                run_once(cfg, dry_run=args.run_now == "dry")
+            except Exception:
+                log.exception("Start-up run failed")
+        serve(cfg)
+        return 0
+
+    stats = run_once(cfg, args.dry_run)
+    return 1 if stats["errors"] else 0
+
+
+def run_once(cfg: Config, dry_run: bool = False) -> dict:
+    stats = build_runner(cfg, dry_run).run()
     print(f"\nDone: {stats['chats']} chats read, {stats['events_added']} appointments "
           f"added/updated, {stats['events_removed']} removed, {stats['contacts']} CRM contacts "
-          f"updated, {stats['errors']} errors.")
-    return 1 if stats["errors"] else 0
+          f"updated, {stats['errors']} errors.", flush=True)
+    return stats
+
+
+def next_run(now: datetime, run_at: str, tz: ZoneInfo) -> datetime:
+    hour, minute = (int(x) for x in run_at.split(":"))
+    local = now.astimezone(tz)
+    target = local.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if target <= local:
+        target = (local + timedelta(days=1)).replace(hour=hour, minute=minute, second=0,
+                                                     microsecond=0)
+    return target
+
+
+def serve(cfg: Config) -> None:
+    tz = ZoneInfo(cfg.timezone)
+    while True:
+        target = next_run(datetime.now(timezone.utc), cfg.run_at, tz)
+        log.info("Next run at %s", target.strftime("%Y-%m-%d %H:%M %Z"))
+        while (remaining := (target - datetime.now(timezone.utc)).total_seconds()) > 0:
+            time.sleep(min(remaining, 300))
+        try:
+            run_once(cfg)
+        except Exception:
+            # Keep the service alive; the next day's run picks up anything missed.
+            log.exception("Daily run failed")
 
 
 if __name__ == "__main__":

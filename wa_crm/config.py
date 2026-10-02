@@ -16,7 +16,10 @@ CONFIG_DIR = Path("~/.wa-crm").expanduser()
 @dataclass
 class Config:
     timezone: str
-    accounts: dict[str, str]                 # account label -> ChatStorage.sqlite path
+    accounts: dict[str, str]                 # account label -> ChatStorage.sqlite path (mac)
+    source: str = "mac"                      # mac = desktop apps, cloud = collector service
+    cloud_db_path: str = "/data/messages.db"
+    run_at: str = "21:00"                    # daily run time for `serve` (local time)
     include_groups: bool = False
     first_run_lookback_days: int = 3
     context_days: int = 30
@@ -47,16 +50,38 @@ def load_env_file(path: Path) -> dict[str, str]:
     return values
 
 
-def load_config(path: str | Path | None = None) -> Config:
-    path = Path(path).expanduser() if path else CONFIG_DIR / "config.yaml"
-    if not path.exists():
-        raise SystemExit(f"Config not found at {path}. Copy config.example.yaml there first.")
-    raw = yaml.safe_load(path.read_text()) or {}
+ENV_PREFIX = "WA_CRM_"
+TEXT_FIELDS = {"timezone", "source", "cloud_db_path", "run_at", "calendar_name", "crm_backend",
+               "crm_csv_path", "state_path", "model"}
 
+
+def load_config(path: str | Path | None = None) -> Config:
+    """Read config.yaml (optional in the cloud), then apply WA_CRM_<SETTING> env overrides.
+
+    e.g. WA_CRM_TIMEZONE=Asia/Kuala_Lumpur, WA_CRM_SOURCE=cloud, WA_CRM_RUN_AT=21:00.
+    WA_ACCOUNTS=whatsapp,business sets the account list.
+    """
+    path = Path(path or os.environ.get("WA_CRM_CONFIG") or CONFIG_DIR / "config.yaml").expanduser()
+    has_env = any(k.startswith(ENV_PREFIX) and k != "WA_CRM_CONFIG" for k in os.environ)
+    if not path.exists() and not has_env:
+        raise SystemExit(f"Config not found at {path}. Copy config.example.yaml there first.")
+    raw = (yaml.safe_load(path.read_text()) if path.exists() else None) or {}
+
+    for key, value in os.environ.items():
+        if key.startswith(ENV_PREFIX) and key != "WA_CRM_CONFIG":
+            name = key[len(ENV_PREFIX):].lower()
+            raw[name] = value if name in TEXT_FIELDS else (yaml.safe_load(value) if value else None)
+
+    if isinstance(raw.get("run_at"), int):   # YAML reads an unquoted 21:00 as 1260 minutes
+        raw["run_at"] = f"{raw['run_at'] // 60:02d}:{raw['run_at'] % 60:02d}"
+
+    account_names = raw.pop("accounts", None)
+    if os.environ.get("WA_ACCOUNTS"):
+        account_names = {a.strip(): None for a in os.environ["WA_ACCOUNTS"].split(",") if a.strip()}
     accounts = {}
-    for name, value in (raw.pop("accounts", None) or {"whatsapp": None, "business": None}).items():
+    for name, value in (account_names or {"whatsapp": None, "business": None}).items():
         accounts[name] = value or DEFAULT_DB_PATHS.get(name)
-        if not accounts[name]:
+        if not accounts[name] and raw.get("source", "mac") == "mac":
             raise SystemExit(f"No database path given for WhatsApp account '{name}'.")
 
     env = load_env_file(path.parent / ".env")
@@ -65,5 +90,7 @@ def load_config(path: str | Path | None = None) -> Config:
     if unknown:
         raise SystemExit(f"Unknown config keys: {', '.join(sorted(unknown))}")
     if "timezone" not in raw:
-        raise SystemExit("config.yaml must set 'timezone', e.g. Asia/Kuala_Lumpur")
+        raise SystemExit("Set 'timezone' in config.yaml or WA_CRM_TIMEZONE, e.g. Asia/Kuala_Lumpur")
+    if raw.get("source", "mac") not in ("mac", "cloud"):
+        raise SystemExit("source must be 'mac' or 'cloud'")
     return Config(accounts=accounts, env=env, **raw)

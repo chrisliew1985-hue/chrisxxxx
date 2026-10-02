@@ -1,0 +1,8 @@
+# For a VPS (Hetzner, DigitalOcean, Lightsail...):  docker compose up -d
+services:
+  wa-crm:
+    build: .
+    restart: unless-stopped
+    env_file: .env          # copy .env.example to .env and fill it in
+    volumes:
+      - ./data:/data
