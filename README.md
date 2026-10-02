@@ -27,7 +27,16 @@ Phones ──(linked device)──► Free cloud server ── saves messages 24
 
 > Linking a server as a device uses an unofficial WhatsApp Web library ([Baileys](https://github.com/WhiskeySockets/Baileys)). It only reads and behaves like a normal WhatsApp Web session, so the risk is low, but WhatsApp does not officially support it. The server stores your chat text, so keep the server account private. You can unlink it any time on your phone under *Settings → Linked devices*.
 
-### 1. Create the free server (about 15 minutes, one time)
+### 1. Get a server
+
+**Already have a VPS (e.g. Hostinger)?** Use it and skip to step 2:
+- Choose an **Ubuntu** (or Debian) template. If you're on a different OS, you can switch it under hPanel → VPS → *OS & Panel*.
+- Log in through hPanel's **Browser terminal**, or `ssh root@<VPS IP>`.
+- In hPanel → VPS → **Firewall**: if a firewall is enabled, allow TCP ports **80** and **443**.
+- Ports 80 and 443 must be free. If the VPS already runs a website on them, the installer stops without changing anything. In that case, ask for the shared-web-server setup.
+- It needs about 500 MB of free RAM. The smallest Hostinger plan is enough.
+
+**No server yet?** Create a free Oracle one (about 15 minutes, one time):
 1. Sign up at <https://www.oracle.com/cloud/free/>. It asks for a card to verify you, but *Always Free* resources are never charged.
 2. Go to **Compute → Instances → Create instance**:
    - **Image:** Ubuntu 24.04.
@@ -38,7 +47,7 @@ Phones ──(linked device)──► Free cloud server ── saves messages 24
 4. Open **Cloud Shell** (the `>_` icon at the top of the Oracle console). Run `ssh -i <key> ubuntu@<public IP>` there, or use any terminal.
 
 ### 2. Install (one command)
-On the server, run:
+On the server (as `root` or a sudo user), run:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/chrisliew1985-hue/chrisxxxx/claude/relaxed-ride-lkxwvs/scripts/setup_server.sh | bash
 ```

@@ -1,5 +1,5 @@
 #!/bin/bash
-# One-time setup on a fresh Ubuntu server (e.g. Oracle Cloud Always Free).
+# One-time setup on an Ubuntu/Debian server (Hostinger VPS, Oracle Cloud Always Free, ...).
 #   curl -fsSL https://raw.githubusercontent.com/chrisliew1985-hue/chrisxxxx/claude/relaxed-ride-lkxwvs/scripts/setup_server.sh | bash
 # It asks for your settings and passwords here on the server, so they never
 # go into GitHub or a chat.
@@ -9,14 +9,30 @@ REPO_URL="https://github.com/chrisliew1985-hue/chrisxxxx.git"
 BRANCH="${BRANCH:-claude/relaxed-ride-lkxwvs}"
 DIR="$HOME/wa-crm"
 
+# Works both as root (Hostinger) and as a normal sudo user (Oracle "ubuntu").
+if [ "$(id -u)" -eq 0 ]; then sudo() { "$@"; }; fi
+
+echo "== Checking web ports 80/443 are free =="
+if command -v ss >/dev/null && ss -ltnH '( sport = :80 or sport = :443 )' | grep -q .; then
+  if ! sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -q caddy; then
+    echo "Something else (probably a website) is already using port 80 or 443 on this server:"
+    ss -ltnp '( sport = :80 or sport = :443 )' || true
+    echo "Stop it, or ask for the 'shared web server' setup instead. Nothing was changed."
+    exit 1
+  fi
+fi
+
 echo "== Installing Docker =="
 if ! command -v docker >/dev/null; then
   curl -fsSL https://get.docker.com | sudo sh
-  sudo usermod -aG docker "$USER"
+  [ "$(id -u)" -eq 0 ] || sudo usermod -aG docker "$USER"
 fi
 
 echo "== Opening web ports 80/443 on this machine's firewall =="
-# Oracle's Ubuntu images block everything except SSH by default.
+# Oracle's Ubuntu images block everything except SSH by default; ufw is common elsewhere.
+if command -v ufw >/dev/null && sudo ufw status | grep -q "Status: active"; then
+  sudo ufw allow 80/tcp && sudo ufw allow 443/tcp
+fi
 for port in 80 443; do
   if ! sudo iptables -C INPUT -m state --state NEW -p tcp --dport $port -j ACCEPT 2>/dev/null; then
     # Insert just before Oracle's catch-all REJECT rule (or at the top if there isn't one).
@@ -25,6 +41,7 @@ for port in 80 443; do
   fi
 done
 if command -v netfilter-persistent >/dev/null; then sudo netfilter-persistent save; fi
+command -v git >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq git; }
 
 echo "== Downloading wa-crm =="
 if [ -d "$DIR/.git" ]; then git -C "$DIR" pull --ff-only; else git clone -b "$BRANCH" "$REPO_URL" "$DIR"; fi
