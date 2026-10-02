@@ -1,0 +1,7 @@
+<!-- @dsCard group="Actions" height=110 -->
+<style>body{padding:16px}.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}.col{display:flex;flex-direction:column;gap:12px}.muted{color:var(--muted-foreground);font-size:14px;line-height:20px;margin:0}.large{font-size:18px;font-weight:600}</style>
+<div id="root"></div>
+<script>
+const h=React.createElement,S=window.Shadcn;
+ReactDOM.createRoot(document.getElementById("root")).render(h('div',{className:'col'},h('div',{className:'row'},h(S.Button,null,'Button'),h(S.Button,{variant:'secondary'},'Secondary'),h(S.Button,{variant:'outline'},'Outline'),h(S.Button,{variant:'ghost'},'Ghost'),h(S.Button,{variant:'destructive'},'Delete'),h(S.Button,{variant:'link'},'Link')),h('div',{className:'row'},h(S.Button,{size:'xs'},'Extra small'),h(S.Button,{size:'sm'},'Small'),h(S.Button,null,'Default'),h(S.Button,{size:'lg'},'Large'),h(S.Button,{disabled:true},'Disabled'))));
+</script>

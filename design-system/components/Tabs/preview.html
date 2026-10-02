@@ -1,0 +1,7 @@
+<!-- @dsCard group="Navigation" height=140 -->
+<style>body{padding:16px}.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}.col{display:flex;flex-direction:column;gap:12px}.muted{color:var(--muted-foreground);font-size:14px;line-height:20px;margin:0}.large{font-size:18px;font-weight:600}</style>
+<div id="root"></div>
+<script>
+const h=React.createElement,S=window.Shadcn;
+ReactDOM.createRoot(document.getElementById("root")).render(h(S.Tabs,{defaultValue:'account',style:{maxWidth:360}},h(S.TabsList,null,h(S.TabsTrigger,{value:'account'},'Account'),h(S.TabsTrigger,{value:'password'},'Password')),h(S.TabsContent,{value:'account'},h('p',{className:'muted'},'Make changes to your account here.')),h(S.TabsContent,{value:'password'},h('p',{className:'muted'},'Change your password here.'))));
+</script>

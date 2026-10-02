@@ -1,0 +1,7 @@
+<!-- @dsCard group="Forms" height=120 -->
+<style>body{padding:16px}.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}.col{display:flex;flex-direction:column;gap:12px}.muted{color:var(--muted-foreground);font-size:14px;line-height:20px;margin:0}.large{font-size:18px;font-weight:600}</style>
+<div id="root"></div>
+<script>
+const h=React.createElement,S=window.Shadcn;
+ReactDOM.createRoot(document.getElementById("root")).render(h('div',{className:'col',style:{maxWidth:320}},h(S.Input,{placeholder:'Email'}),h(S.Input,{placeholder:'Disabled',disabled:true}),h(S.Input,{defaultValue:'not-an-email','aria-invalid':true})));
+</script>

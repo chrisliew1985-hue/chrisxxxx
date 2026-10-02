@@ -1,0 +1,7 @@
+<!-- @dsCard group="Feedback" height=80 -->
+<style>body{padding:16px}.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}.col{display:flex;flex-direction:column;gap:12px}.muted{color:var(--muted-foreground);font-size:14px;line-height:20px;margin:0}.large{font-size:18px;font-weight:600}</style>
+<div id="root"></div>
+<script>
+const h=React.createElement,S=window.Shadcn;
+ReactDOM.createRoot(document.getElementById("root")).render(h('div',{className:'row'},h(S.Skeleton,{style:{width:48,height:48,borderRadius:9999}}),h('div',{className:'col'},h(S.Skeleton,{style:{width:250,height:16}}),h(S.Skeleton,{style:{width:200,height:16}}))));
+</script>

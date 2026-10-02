@@ -1,0 +1,7 @@
+<!-- @dsCard group="Feedback" height=170 -->
+<style>body{padding:16px}.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}.col{display:flex;flex-direction:column;gap:12px}.muted{color:var(--muted-foreground);font-size:14px;line-height:20px;margin:0}.large{font-size:18px;font-weight:600}</style>
+<div id="root"></div>
+<script>
+const h=React.createElement,S=window.Shadcn;
+ReactDOM.createRoot(document.getElementById("root")).render(h('div',{className:'col',style:{maxWidth:440}},h(S.Alert,null,h(S.AlertTitle,null,'Heads up!'),h(S.AlertDescription,null,'You can add components to your app using the CLI.')),h(S.Alert,{variant:'destructive'},h(S.AlertTitle,null,'Error'),h(S.AlertDescription,null,'Your session has expired. Please log in again.'))));
+</script>
