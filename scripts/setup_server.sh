@@ -12,14 +12,18 @@ DIR="$HOME/wa-crm"
 # Works both as root (Hostinger) and as a normal sudo user (Oracle "ubuntu").
 if [ "$(id -u)" -eq 0 ]; then sudo() { "$@"; }; fi
 
-echo "== Checking web ports 80/443 are free =="
-if command -v ss >/dev/null && ss -ltnH '( sport = :80 or sport = :443 )' | grep -q .; then
-  if ! sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -q caddy; then
-    echo "Something else (probably a website) is already using port 80 or 443 on this server:"
-    ss -ltnp '( sport = :80 or sport = :443 )' || true
-    echo "Stop it, or ask for the 'shared web server' setup instead. Nothing was changed."
-    exit 1
-  fi
+echo "== Checking web port 443 is free (port 80 is left alone for other apps) =="
+# Anything other than our own Caddy container listening on 443 (Docker-published ports
+# show up as docker-proxy in ss, so those are checked via `docker ps` instead).
+others_443="$( {
+  ss -ltnpH 2>/dev/null | awk '$4 ~ /[:.]443$/' | grep -v docker-proxy
+  docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null | grep -E ':443->' | grep -v '^wa-crm-caddy'
+} || true )"
+if [ -n "$others_443" ]; then
+  echo "Port 443 is already used by another app on this server:"
+  echo "$others_443"
+  echo "Nothing was changed. Send this output to get a setup that shares the port."
+  exit 1
 fi
 
 echo "== Installing Docker =="
@@ -36,12 +40,12 @@ if ! sudo docker compose version >/dev/null 2>&1; then
     || sudo apt-get install -y -qq docker-compose-plugin
 fi
 
-echo "== Opening web ports 80/443 on this machine's firewall =="
+echo "== Opening web port 443 on this machine's firewall =="
 # Oracle's Ubuntu images block everything except SSH by default; ufw is common elsewhere.
 if command -v ufw >/dev/null && sudo ufw status | grep -q "Status: active"; then
-  sudo ufw allow 80/tcp && sudo ufw allow 443/tcp
+  sudo ufw allow 443/tcp
 fi
-for port in 80 443; do
+for port in 443; do
   if ! sudo iptables -C INPUT -m state --state NEW -p tcp --dport $port -j ACCEPT 2>/dev/null; then
     # Insert just before Oracle's catch-all REJECT rule (or at the top if there isn't one).
     pos="$(sudo iptables -L INPUT --line-numbers -n | awk '$2=="REJECT"{print $1; exit}')"
@@ -93,7 +97,7 @@ ENV
 fi
 
 echo "== Starting =="
-sudo docker compose up -d --build
+sudo docker compose up -d --build --remove-orphans
 
 DOMAIN="$(grep '^DOMAIN=' .env | cut -d= -f2)"
 for _ in $(seq 1 30); do

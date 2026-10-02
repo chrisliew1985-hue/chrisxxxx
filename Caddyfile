@@ -1,0 +1,15 @@
+# HTTPS for the wa-crm API using port 443 only, so port 80 stays free for other apps
+# on this server (e.g. a website or WA blast tool). The certificate is obtained with
+# the TLS-ALPN challenge, which needs only port 443.
+{
+	auto_https disable_redirects
+}
+
+{$DOMAIN} {
+	tls {
+		issuer acme {
+			disable_http_challenge
+		}
+	}
+	reverse_proxy wa-crm:8080
+}

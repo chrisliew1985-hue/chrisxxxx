@@ -34,7 +34,7 @@ Phones ──(linked device)──► Free cloud server ── saves messages 24
 - Choose an **Ubuntu** (or Debian) template. If you're on a different OS, you can switch it under hPanel → VPS → *OS & Panel*.
 - Log in through hPanel's **Browser terminal**, or `ssh root@<VPS IP>`.
 - In hPanel → VPS → **Firewall**: if a firewall is enabled, allow TCP ports **80** and **443**.
-- Ports 80 and 443 must be free. If the VPS already runs a website on them, the installer stops without changing anything. In that case, ask for the shared-web-server setup.
+- Port **443** must be free. Port 80 is left alone, so a website or WA blast tool already using it keeps working. If 443 is taken, the installer stops without changing anything.
 - It needs about 500 MB of free RAM. The smallest Hostinger plan is enough.
 
 **No server yet?** Create a free Oracle one (about 15 minutes, one time):
@@ -127,6 +127,6 @@ pytest
 | `wa_crm/main.py` | Daily runner, `serve` scheduler and CLI |
 | `wa_crm/server.py` | Option A: API the daily Claude Routine calls |
 | `docs/routine_prompt.md` | Option A: the Routine's prompt |
-| `scripts/setup_server.sh`, `docker-compose.yml` | Option A: one-command free-server install with HTTPS |
+| `scripts/setup_server.sh`, `docker-compose.yml`, `Caddyfile` | Option A: one-command server install, HTTPS on port 443 only |
 | `Dockerfile`, `scripts/start_cloud.sh` | Cloud container (collector + daily job) |
 | `scripts/install_mac.sh` | Mac: venv + launchd daily schedule |

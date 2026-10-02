@@ -12,14 +12,16 @@ services:
 
   # HTTPS in front of the API so chats are encrypted on the way to the Claude Routine.
   # DOMAIN is e.g. 141-147-12-34.sslip.io (a free name that points at your server's IP).
+  # Uses port 443 only, so port 80 stays free for other apps on the server.
   caddy:
     image: caddy:2
     restart: unless-stopped
-    command: caddy reverse-proxy --from ${DOMAIN:?set DOMAIN in .env} --to wa-crm:8080
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
     ports:
-      - "80:80"
       - "443:443"
     volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./caddy:/data       # keeps the HTTPS certificate across restarts
     depends_on:
       - wa-crm
