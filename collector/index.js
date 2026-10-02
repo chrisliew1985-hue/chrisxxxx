@@ -1,283 +1,165 @@
-// Always-on WhatsApp collector for the cloud.
+// Always-on WhatsApp collector for the cloud (read-only: it never sends anything).
 //
-// Links to each WhatsApp account as a "linked device" (like WhatsApp Web) and
-// saves every text message into a SQLite file that the Python daily job reads.
-// It never sends anything.
+// Each account runs WhatsApp Web in a headless Chromium via whatsapp-web.js (the same
+// approach as common WA tools), linked as a "linked device" with a pairing code.
+// Text of every message is saved to /data/messages.db for the Python job.
 //
 // Env:
 //   WA_ACCOUNTS=whatsapp,business       account labels (one linked device each)
 //   WA_PHONE_WHATSAPP=60123456789        phone for pairing-code login (digits, with country code)
 //   WA_PHONE_BUSINESS=60198765432
-//   DATA_DIR=/data                       auth sessions + messages.db live here
-//   HISTORY_DAYS=45                      how much past history to keep from the first sync
+//   DATA_DIR=/data                       login sessions + messages.db live here
+//   HISTORY_DAYS=45                      how far back to load chat history on each start
 
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
-import makeWASocket, {
-  Browsers,
-  DisconnectReason,
-  fetchLatestBaileysVersion,
-  fetchLatestWaWebVersion,
-  getContentType,
-  isJidBroadcast,
-  isJidNewsletter,
-  isJidStatusBroadcast,
-  isLidUser,
-  jidNormalizedUser,
-  normalizeMessageContent,
-  useMultiFileAuthState,
-} from 'baileys'
-import pino from 'pino'
+import pkg from 'whatsapp-web.js'
 import qrcode from 'qrcode-terminal'
+import { isIgnoredChat, messageText, normalizeJid, openStore } from './store.js'
+
+const { Client, LocalAuth } = pkg
 
 const DATA_DIR = process.env.DATA_DIR || '/data'
 const ACCOUNTS = (process.env.WA_ACCOUNTS || 'whatsapp,business').split(',').map(s => s.trim()).filter(Boolean)
 const HISTORY_DAYS = Number(process.env.HISTORY_DAYS || 45)
-const CONNECT_TIMEOUT_MS = Number(process.env.CONNECT_TIMEOUT_MS || 90_000)
-const logger = pino({ level: process.env.LOG_LEVEL || 'warn' })
+const HISTORY_PER_CHAT = Number(process.env.HISTORY_PER_CHAT || 150)
 
 mkdirSync(DATA_DIR, { recursive: true })
-const db = openDb(join(DATA_DIR, 'messages.db'))
+const store = openStore(join(DATA_DIR, 'messages.db'))
 
-export function openDb(path) {
-  const db = new DatabaseSync(path)
-  db.exec(`
-    PRAGMA journal_mode = WAL;
-    CREATE TABLE IF NOT EXISTS messages (
-      account TEXT NOT NULL, chat_jid TEXT NOT NULL, msg_id TEXT NOT NULL,
-      ts INTEGER NOT NULL, from_me INTEGER NOT NULL, sender TEXT, text TEXT NOT NULL,
-      PRIMARY KEY (account, chat_jid, msg_id)
-    );
-    CREATE INDEX IF NOT EXISTS messages_ts ON messages (account, ts);
-    CREATE TABLE IF NOT EXISTS contacts (
-      account TEXT NOT NULL, jid TEXT NOT NULL, name TEXT, notify TEXT,
-      PRIMARY KEY (account, jid)
-    );
-    CREATE TABLE IF NOT EXISTS lid_map (
-      account TEXT NOT NULL, lid TEXT NOT NULL, pn TEXT NOT NULL,
-      PRIMARY KEY (account, lid)
-    );
-    CREATE TABLE IF NOT EXISTS status (
-      account TEXT PRIMARY KEY, state TEXT NOT NULL, detail TEXT, updated_at INTEGER NOT NULL
-    );
-  `)
-  return db
+// Prefer phone-number IDs over anonymous @lid ones so the CRM gets a phone number.
+async function resolveJid(account, client, jid) {
+  if (!jid || !jid.endsWith('@lid')) return normalizeJid(jid)
+  const known = store.lookupLid(account, jid)
+  if (known) return known
+  try {
+    const [res] = await client.getContactLidAndPhone([jid])
+    if (res?.pn) {
+      store.saveLid(account, jid, res.pn)
+      return normalizeJid(res.pn)
+    }
+  } catch {}
+  return normalizeJid(jid)
 }
 
-const stmt = {
-  msg: db.prepare(`INSERT OR IGNORE INTO messages VALUES (?, ?, ?, ?, ?, ?, ?)`),
-  contactName: db.prepare(`INSERT INTO contacts (account, jid, name) VALUES (?, ?, ?)
-    ON CONFLICT DO UPDATE SET name = excluded.name`),
-  contactNotify: db.prepare(`INSERT INTO contacts (account, jid, notify) VALUES (?, ?, ?)
-    ON CONFLICT DO UPDATE SET notify = excluded.notify`),
-  lid: db.prepare(`INSERT OR REPLACE INTO lid_map VALUES (?, ?, ?)`),
-  lidLookup: db.prepare(`SELECT pn FROM lid_map WHERE account = ? AND lid = ?`),
-  status: db.prepare(`INSERT OR REPLACE INTO status VALUES (?, ?, ?, ?)`),
-}
-
-export function setStatus(account, state, detail = null) {
-  stmt.status.run(account, state, detail, Math.floor(Date.now() / 1000))
-}
-
-// Prefer phone-number JIDs over anonymous @lid ones so the CRM gets a phone number.
-function resolveJid(account, jid, alt) {
-  if (!jid) return null
-  jid = jidNormalizedUser(jid)
-  if (!isLidUser(jid)) return jid
-  if (alt && !isLidUser(alt)) {
-    stmt.lid.run(account, jid, jidNormalizedUser(alt))
-    return jidNormalizedUser(alt)
-  }
-  return stmt.lidLookup.get(account, jid)?.pn ?? jid
-}
-
-const SKIP_TYPES = new Set([
-  'protocolMessage', 'reactionMessage', 'senderKeyDistributionMessage',
-  'pollUpdateMessage', 'keepInChatMessage', 'messageContextInfo',
-])
-
-export function messageText(message) {
-  const content = normalizeMessageContent(message)
-  if (!content) return null
-  const type = getContentType(content)
-  if (!type || SKIP_TYPES.has(type)) return null
-  const m = content[type]
-  switch (type) {
-    case 'conversation': return content.conversation
-    case 'extendedTextMessage': return m.text
-    case 'imageMessage': return m.caption ? `[photo] ${m.caption}` : '[photo]'
-    case 'videoMessage': return m.caption ? `[video] ${m.caption}` : '[video]'
-    case 'documentMessage':
-    case 'documentWithCaptionMessage':
-      return `[document] ${m.caption || m.fileName || ''}`.trim()
-    case 'audioMessage': return '[voice note]'
-    case 'locationMessage':
-    case 'liveLocationMessage':
-      return `[location] ${[m.name, m.address].filter(Boolean).join(', ')} ` +
-        `https://maps.google.com/?q=${m.degreesLatitude},${m.degreesLongitude}`
-    case 'contactMessage': return `[contact card] ${m.displayName || ''}`
-    case 'buttonsResponseMessage': return m.selectedDisplayText
-    case 'listResponseMessage': return m.title
-    case 'templateButtonReplyMessage': return m.selectedDisplayText
-    default: return '[attachment]'
-  }
-}
-
-export function saveMessage(account, msg, minTs) {
-  const key = msg.key
-  if (!key?.remoteJid || !key.id) return
-  const raw = key.remoteJid
-  if (isJidBroadcast(raw) || isJidStatusBroadcast(raw) || isJidNewsletter(raw)) return
-  const ts = Number(msg.messageTimestamp ?? 0)
-  if (!ts || ts < minTs) return
-  const text = messageText(msg.message)
+async function save(account, client, msg) {
+  const raw = msg.fromMe ? msg.to : msg.from
+  if (isIgnoredChat(raw)) return
+  const text = messageText(msg)
   if (!text) return
-
-  const chatJid = resolveJid(account, raw, key.remoteJidAlt)
-  const fromMe = key.fromMe ? 1 : 0
-  if (!fromMe && msg.pushName) {
-    const senderJid = resolveJid(account, key.participant || raw, key.participantAlt || key.remoteJidAlt)
-    stmt.contactNotify.run(account, senderJid, msg.pushName)
+  const chatJid = await resolveJid(account, client, raw)
+  const notify = msg._data?.notifyName
+  if (!msg.fromMe && notify) {
+    const senderJid = await resolveJid(account, client, msg.author || msg.from)
+    store.saveNotify(account, senderJid, notify)
   }
-  stmt.msg.run(account, chatJid, key.id, ts, fromMe, fromMe ? 'Me' : (msg.pushName || null), text)
+  store.saveMessage(account, {
+    chatJid, id: msg.id?._serialized || msg.id?.id, ts: msg.timestamp,
+    fromMe: msg.fromMe, sender: notify, text,
+  })
 }
 
-export function saveContacts(account, contacts) {
-  for (const c of contacts) {
-    if (c.lid && c.phoneNumber) stmt.lid.run(account, jidNormalizedUser(c.lid), jidNormalizedUser(c.phoneNumber))
-    const jid = resolveJid(account, c.phoneNumber || c.id, null)
-    if (!jid) continue
-    if (c.name) stmt.contactName.run(account, jid, c.name)
-    else if (c.notify || c.verifiedName) stmt.contactNotify.run(account, jid, c.notify || c.verifiedName)
+// Load recent history (also fills any gap while the server or WhatsApp was down).
+async function backfill(account, client) {
+  const since = Date.now() / 1000 - HISTORY_DAYS * 86400
+  let chats = []
+  try {
+    chats = await client.getChats()
+  } catch (e) {
+    console.error(`[${account}] getChats failed: ${e.message}`)
+    return
   }
-}
-
-// Group subjects (and some contact names) arrive on chat objects.
-export function saveChatNames(account, chats) {
-  for (const c of chats) {
-    if (!c.id || !c.name) continue
-    const jid = resolveJid(account, c.id, c.pnJid)
-    if (jid.endsWith('@g.us')) stmt.contactName.run(account, jid, c.name)
-    else stmt.contactNotify.run(account, jid, c.name)
-  }
-}
-
-// WhatsApp rejects clients that announce an outdated WhatsApp Web version (the socket
-// closes straight away with "Connection Terminated"), so ask for the current one.
-// WA_VERSION=2,3000,1012345678 overrides it if ever needed.
-let waVersion
-async function currentWaVersion() {
-  if (process.env.WA_VERSION) return process.env.WA_VERSION.split(',').map(Number)
-  if (waVersion) return waVersion
-  for (const fetcher of [fetchLatestWaWebVersion, fetchLatestBaileysVersion]) {
+  let saved = 0
+  for (const chat of chats) {
+    const id = chat.id?._serialized
+    if (isIgnoredChat(id) || !chat.timestamp || chat.timestamp < since) continue
     try {
-      const { version, error } = await fetcher()
-      if (version && !error) {
-        waVersion = version
-        console.log(`Using WhatsApp Web version ${version.join('.')}`)
-        return waVersion
-      }
-    } catch {}
-  }
-  console.log('Could not look up the current WhatsApp Web version; using the built-in one')
-  return undefined
-}
-
-async function connect(account, attempt = 0) {
-  const { state, saveCreds } = await useMultiFileAuthState(join(DATA_DIR, 'auth', account))
-  const phone = (process.env[`WA_PHONE_${account.toUpperCase()}`] || '').replace(/\D/g, '')
-
-  const version = await currentWaVersion()
-  const sock = makeWASocket({
-    ...(version ? { version } : {}),
-    auth: state,
-    logger,
-    browser: Browsers.macOS('Desktop'),   // "Desktop" gets a fuller history sync on first link
-    syncFullHistory: true,
-    markOnlineOnConnect: false,           // don't show you as "online" or affect phone notifications
-  })
-  sock.ev.on('creds.update', saveCreds)
-
-  // Baileys can hang in "connecting" forever on a bad network, so give up and
-  // retry if the link isn't open in time (unless we're waiting for you to link it).
-  let opened = false
-  let waitingForLink = false
-  const watchdog = setTimeout(() => {
-    if (!opened && !waitingForLink) sock.end(new Error('connect timeout'))
-  }, CONNECT_TIMEOUT_MS)
-
-  let pairingRequested = false
-  sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
-    if (qr) {
-      waitingForLink = true
-      setStatus(account, 'waiting_for_link')
-      if (phone && !pairingRequested) {
-        pairingRequested = true
-        try {
-          const code = await sock.requestPairingCode(phone)
-          console.log(`\n[${account}] PAIRING CODE: ${code}\n` +
-            `  On the phone with this WhatsApp: Settings > Linked devices > Link a device >\n` +
-            `  "Link with phone number instead", then enter the code above.\n`)
-        } catch (e) {
-          console.error(`[${account}] could not get pairing code: ${e.message}`)
+      const jid = await resolveJid(account, client, id)
+      if (chat.name) store.saveName(account, jid, chat.name)
+      const msgs = await chat.fetchMessages({ limit: HISTORY_PER_CHAT })
+      for (const m of msgs) {
+        if (m.timestamp >= since) {
+          await save(account, client, m)
+          saved++
         }
-      } else if (!phone) {
-        console.log(`\n[${account}] Scan this QR in WhatsApp > Settings > Linked devices:`)
-        qrcode.generate(qr, { small: true })
       }
+    } catch (e) {
+      console.error(`[${account}] history for ${chat.name || id} failed: ${e.message}`)
     }
-    if (connection === 'open') {
-      opened = true
-      clearTimeout(watchdog)
-      attempt = 0
-      setStatus(account, 'connected')
-      console.log(`[${account}] connected as ${sock.user?.id}`)
-    }
-    if (connection === 'close') {
-      clearTimeout(watchdog)
-      const code = lastDisconnect?.error?.output?.statusCode
-      if (code === DisconnectReason.loggedOut) {
-        setStatus(account, 'logged_out', 'Unlinked from the phone. Delete the auth folder and re-link.')
-        console.error(`[${account}] LOGGED OUT. Remove ${join(DATA_DIR, 'auth', account)} and restart to re-link.`)
-        return
-      }
-      const reason = `${lastDisconnect?.error?.message || 'closed'} (code ${code})`
-      setStatus(account, 'reconnecting', reason)
-      if (code === 405 || code === 426) waVersion = undefined   // version rejected: look it up again
-      console.log(`[${account}] disconnected (${reason}); retrying`)
-      const delay = Math.min(60_000, 2_000 * 2 ** attempt)
-      setTimeout(() => connect(account, attempt + 1).catch(console.error), delay)
-    }
-  })
-
-  const historyMin = () => Math.floor(Date.now() / 1000) - HISTORY_DAYS * 86400
-
-  sock.ev.on('lid-mapping.update', ({ lid, pn }) => stmt.lid.run(account, jidNormalizedUser(lid), jidNormalizedUser(pn)))
-  sock.ev.on('contacts.upsert', contacts => saveContacts(account, contacts))
-  sock.ev.on('contacts.update', contacts => saveContacts(account, contacts))
-  sock.ev.on('chats.upsert', chats => saveChatNames(account, chats))
-  sock.ev.on('messaging-history.set', ({ chats, contacts, messages, lidPnMappings }) => {
-    for (const { lid, pn } of lidPnMappings || []) stmt.lid.run(account, jidNormalizedUser(lid), jidNormalizedUser(pn))
-    saveContacts(account, contacts || [])
-    saveChatNames(account, chats || [])
-    const min = historyMin()
-    for (const m of messages || []) saveMessage(account, m, min)
-    console.log(`[${account}] history sync: ${messages?.length || 0} messages`)
-  })
-  sock.ev.on('messages.upsert', ({ messages }) => {
-    for (const m of messages) saveMessage(account, m, 0)
-  })
-}
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  console.log(`WhatsApp collector starting for: ${ACCOUNTS.join(', ')}`)
-  setInterval(() => {}, 60_000)   // keep the process alive between reconnects
-  for (const account of ACCOUNTS) {
-    setStatus(account, 'starting')
-    connect(account).catch(e => {
-      console.error(`[${account}] failed to start:`, e)
-      setStatus(account, 'error', e.message)
-    })
   }
+  console.log(`[${account}] history loaded: ${saved} messages from ${chats.length} chats`)
 }
+
+function start(account, attempt = 0) {
+  const phone = (process.env[`WA_PHONE_${account.toUpperCase()}`] || '').replace(/\D/g, '')
+  const client = new Client({
+    authStrategy: new LocalAuth({ clientId: account, dataPath: join(DATA_DIR, 'wwebjs-auth') }),
+    ...(phone ? { pairWithPhoneNumber: { phoneNumber: phone, showNotification: true } } : {}),
+    puppeteer: {
+      headless: true,
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
+             '--disable-gpu', '--no-zygote', '--disable-extensions'],
+    },
+  })
+
+  client.on('code', code => {
+    store.setStatus(account, 'waiting_for_link')
+    const pretty = code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code
+    console.log(`\n[${account}] PAIRING CODE: ${pretty}\n` +
+      `  On the phone with this WhatsApp: Settings > Linked devices > Link a device >\n` +
+      `  "Link with phone number instead", then enter the code above.\n` +
+      `  (A new code appears every few minutes until it's linked.)\n`)
+  })
+  client.on('qr', qr => {
+    if (phone) return
+    store.setStatus(account, 'waiting_for_link')
+    console.log(`\n[${account}] Scan this QR in WhatsApp > Settings > Linked devices:`)
+    qrcode.generate(qr, { small: true })
+  })
+  client.on('authenticated', () => console.log(`[${account}] linked, loading...`))
+  client.on('auth_failure', m => {
+    store.setStatus(account, 'logged_out', `Login failed: ${m}`)
+    console.error(`[${account}] login failed: ${m}`)
+  })
+  client.on('ready', async () => {
+    attempt = 0
+    store.setStatus(account, 'connected')
+    console.log(`[${account}] connected as ${client.info?.wid?.user || ''}`)
+    await backfill(account, client)
+  })
+  client.on('message_create', msg => {
+    save(account, client, msg).catch(e => console.error(`[${account}] save failed: ${e.message}`))
+  })
+  client.on('disconnected', async reason => {
+    const loggedOut = String(reason).toUpperCase().includes('LOGOUT')
+    store.setStatus(account, loggedOut ? 'logged_out' : 'reconnecting', String(reason))
+    console.error(`[${account}] disconnected: ${reason}`)
+    try { await client.destroy() } catch {}
+    if (loggedOut) {
+      console.error(`[${account}] Unlinked from the phone. To link again: ` +
+        `rm -rf ${join(DATA_DIR, 'wwebjs-auth', `session-${account}`)} and restart.`)
+      return
+    }
+    restart(account, attempt + 1)
+  })
+
+  store.setStatus(account, 'starting')
+  client.initialize().catch(async e => {
+    store.setStatus(account, 'reconnecting', e.message)
+    console.error(`[${account}] failed to start: ${e.message}`)
+    try { await client.destroy() } catch {}
+    restart(account, attempt + 1)
+  })
+}
+
+function restart(account, attempt) {
+  const delay = Math.min(300_000, 5_000 * 2 ** Math.min(attempt, 6))
+  console.log(`[${account}] retrying in ${Math.round(delay / 1000)}s`)
+  setTimeout(() => start(account, attempt), delay)
+}
+
+console.log(`WhatsApp collector starting for: ${ACCOUNTS.join(', ')}`)
+setInterval(() => {}, 60_000)   // keep the process alive between restarts
+// Start one at a time so two browsers don't boot at once on a small server.
+ACCOUNTS.forEach((account, i) => setTimeout(() => start(account), i * 20_000))

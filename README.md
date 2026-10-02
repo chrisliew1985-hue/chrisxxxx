@@ -26,7 +26,7 @@ Phones ──(linked device)──► Free cloud server ── saves messages 24
 - **AI:** a daily **Claude Routine** on your existing Claude plan reads the new chats. It adds confirmed appointments through your **Google Calendar** connection and updates the CRM through your **Notion** connection.
 - **Extra cost:** $0.
 
-> Linking a server as a device uses an unofficial WhatsApp Web library ([Baileys](https://github.com/WhiskeySockets/Baileys)). It only reads and behaves like a normal WhatsApp Web session, so the risk is low, but WhatsApp does not officially support it. The server stores your chat text, so keep the server account private. You can unlink it any time on your phone under *Settings → Linked devices*.
+> The server runs real WhatsApp Web in a hidden browser ([whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js), the same library many WA tools use) and links it as a device. It only reads, so the risk is low, but WhatsApp does not officially support automation tools. The server stores your chat text, so keep the server account private. You can unlink it any time on your phone under *Settings → Linked devices*.
 
 ### 1. Get a server
 
@@ -87,13 +87,9 @@ This option reads the WhatsApp desktop apps' local databases directly, with no l
 4. Give Python **Full Disk Access**. The installer prints the path; add it under System Settings → Privacy & Security.
 5. Preview with `~/.wa-crm/venv/bin/python -m wa_crm run --dry-run`, then run it for real with `launchctl kickstart gui/$(id -u)/com.wa-crm.daily`.
 
-## Option C: Fully automatic with an Anthropic API key (Railway or any Docker host)
+## Option C: Fully automatic with an Anthropic API key
 
-If you set `ANTHROPIC_API_KEY`, the container calls Claude itself every day at `WA_CRM_RUN_AT`, and no Routine is needed. In that mode it writes to Notion with `NOTION_TOKEN` / `NOTION_DATABASE_ID` (create the table with `python -m wa_crm setup-notion --parent-page <id>`). Hosting is about US$5/month on Railway, and Claude costs roughly US$0.50–1.50/day. For Railway:
-1. Deploy this repo.
-2. Add a Volume at `/data`.
-3. Add the variables from [`.env.example`](.env.example).
-4. Link WhatsApp from the logs as in step 3 above.
+If you set `ANTHROPIC_API_KEY` in `.env`, the server calls Claude itself every day at `WA_CRM_RUN_AT`, and no Routine is needed. In that mode it writes to Notion with `NOTION_TOKEN` / `NOTION_DATABASE_ID` (create the table with `python -m wa_crm setup-notion --parent-page <id>`). Install it the same way as Option A, with the installer or `docker compose up -d`. Claude costs roughly US$0.50–1.50/day.
 
 ## Day-to-day
 
@@ -106,7 +102,7 @@ If you set `ANTHROPIC_API_KEY`, the container calls Claude itself every day at `
 ## Cost
 
 - **Option A:** $0 extra. The Oracle server is Always Free, and the Routine uses your existing Claude plan's usage.
-- **Option C:** about US$5/month hosting plus roughly US$0.50–1.50/day for Claude.
+- **Option C:** your server, plus roughly US$0.50–1.50/day for Claude.
 
 ## Development
 
@@ -114,11 +110,12 @@ If you set `ANTHROPIC_API_KEY`, the container calls Claude itself every day at `
 pip install -r requirements-dev.txt
 (cd collector && npm ci)
 pytest
+node collector/test.mjs
 ```
 
 | File | Purpose |
 | --- | --- |
-| `collector/index.js` | Cloud: always-on linked-device collector, saves messages to `/data/messages.db` |
+| `collector/index.js`, `collector/store.js` | Cloud: always-on collector (whatsapp-web.js + headless Chromium in its own container), saves messages to `/data/messages.db` |
 | `wa_crm/cloud_store.py` | Cloud: reads the collector's database |
 | `wa_crm/whatsapp.py` | Mac: reads `ChatStorage.sqlite` from both WhatsApp desktop apps |
 | `wa_crm/extract.py` | Claude prompt and structured output (contact type, potential, appointments) |
@@ -128,5 +125,5 @@ pytest
 | `wa_crm/server.py` | Option A: API the daily Claude Routine calls |
 | `docs/routine_prompt.md` | Option A: the Routine's prompt |
 | `scripts/setup_server.sh`, `docker-compose.yml`, `Caddyfile` | Option A: one-command server install, HTTPS on port 443 only |
-| `Dockerfile`, `scripts/start_cloud.sh` | Cloud container (collector + daily job) |
+| `Dockerfile`, `scripts/start_cloud.sh` | Cloud: Python container (API for the Routine, or the daily job in API-key mode) |
 | `scripts/install_mac.sh` | Mac: venv + launchd daily schedule |

@@ -1,29 +1,33 @@
-// Test helper: writes fake WhatsApp events through the real collector code.
+// Test helper: writes fake whatsapp-web.js messages through the real storage code.
 // Usage: DATA_DIR=<dir> node fixture.js <unix-now>
+import { join } from 'node:path'
+import { messageText, openStore } from './store.js'
+
 const now = Number(process.argv[2])
-const c = await import('./index.js')
+const store = openStore(join(process.env.DATA_DIR, 'messages.db'))
 
-c.setStatus('whatsapp', 'connected')
-c.setStatus('business', 'logged_out', 'Unlinked from the phone.')
-c.saveContacts('whatsapp', [{ id: '60123456789@s.whatsapp.net', name: 'Mr Tan (Mont Kiara)' }])
-c.saveChatNames('whatsapp', [{ id: '1203630@g.us', name: 'KL Agents Co-broke' }])
+store.setStatus('whatsapp', 'connected')
+store.setStatus('business', 'logged_out', 'Unlinked from the phone.')
+store.saveName('whatsapp', '60123456789@c.us', 'Mr Tan (Mont Kiara)')
+store.saveName('whatsapp', '1203630@g.us', 'KL Agents Co-broke')
+// A contact that only appears under an anonymous @lid id, resolved to their phone.
+store.saveLid('whatsapp', '99887766@lid', '60177777777@c.us')
 
-const msg = (id, jid, ts, message, extra = {}) => ({
-  key: { remoteJid: jid, id, fromMe: false, ...extra.key },
-  messageTimestamp: ts, message, pushName: extra.pushName,
-})
-const tan = '60123456789@s.whatsapp.net'
-for (const m of [
-  msg('a1', tan, now - 10 * 86400, { conversation: 'Looking for 3 room condo, RM1.2m' }, { pushName: 'Tan' }),
-  msg('a2', tan, now - 5 * 3600, { conversation: 'Can view Saturday 3pm?' }, { pushName: 'Tan' }),
-  msg('a3', tan, now - 4 * 3600, { conversation: 'Ok confirmed Sat 3pm' }, { key: { fromMe: true } }),
-  msg('a4', tan, now - 3 * 3600, { reactionMessage: { text: '👍' } }),
-  msg('a3', tan, now - 4 * 3600, { conversation: 'duplicate delivery' }, { key: { fromMe: true } }),
-  // Contact who appears under an anonymous @lid id, with the phone number as the alt JID.
-  msg('b1', '99887766@lid', now - 2 * 3600, { conversation: 'Hi I am agent Lim, co-broke?' },
-      { key: { remoteJidAlt: '60177777777@s.whatsapp.net' }, pushName: 'Lim PropNex' }),
-  msg('b2', '99887766@lid', now - 3600, { conversation: 'Unit available for viewing' }),
-  msg('g1', '1203630@g.us', now - 3600, { conversation: 'New listing' },
-      { key: { participant: '60188888888@s.whatsapp.net' }, pushName: 'Agent Wong' }),
-  msg('s1', 'status@broadcast', now - 3600, { conversation: 'my status' }),
-]) c.saveMessage('whatsapp', m, 0)
+// Same flow as index.js save(): wwebjs message -> text -> store.
+const put = (chatJid, m) => {
+  const text = messageText(m)
+  if (!text) return
+  if (!m.fromMe && m._data?.notifyName) store.saveNotify('whatsapp', m.author || chatJid, m._data.notifyName)
+  store.saveMessage('whatsapp', { chatJid, id: m.id, ts: m.timestamp, fromMe: m.fromMe,
+                                   sender: m._data?.notifyName, text })
+}
+const tan = '60123456789@c.us'
+const lim = store.lookupLid('whatsapp', '99887766@lid')
+put(tan, { id: 'a1', type: 'chat', timestamp: now - 10 * 86400, body: 'Looking for 3 room condo, RM1.2m', _data: { notifyName: 'Tan' } })
+put(tan, { id: 'a2', type: 'chat', timestamp: now - 5 * 3600, body: 'Can view Saturday 3pm?', _data: { notifyName: 'Tan' } })
+put(tan, { id: 'a3', type: 'chat', timestamp: now - 4 * 3600, body: 'Ok confirmed Sat 3pm', fromMe: true })
+put(tan, { id: 'a4', type: 'reaction', timestamp: now - 3 * 3600, body: '👍' })
+put(tan, { id: 'a3', type: 'chat', timestamp: now - 4 * 3600, body: 'duplicate delivery', fromMe: true })
+put(lim, { id: 'b1', type: 'chat', timestamp: now - 2 * 3600, body: 'Hi I am agent Lim, co-broke?', _data: { notifyName: 'Lim PropNex' } })
+put(lim, { id: 'b2', type: 'chat', timestamp: now - 3600, body: 'Unit available for viewing' })
+put('1203630@g.us', { id: 'g1', type: 'chat', timestamp: now - 3600, body: 'New listing', author: '60188888888@c.us', _data: { notifyName: 'Agent Wong' } })

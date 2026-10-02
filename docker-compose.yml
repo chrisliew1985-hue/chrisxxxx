@@ -1,6 +1,15 @@
 # Free server (Oracle Cloud "Always Free" or any VPS):
 #   ./scripts/setup_server.sh      (does all of this for you)
 services:
+  # Keeps both WhatsApps linked and saves messages to ./data/messages.db.
+  collector:
+    build: ./collector
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/data
+
+  # API for the daily Claude Routine (or the daily job itself in API-key mode).
   wa-crm:
     build: .
     restart: unless-stopped
@@ -12,7 +21,7 @@ services:
 
   # HTTPS in front of the API so chats are encrypted on the way to the Claude Routine.
   # DOMAIN is e.g. 141-147-12-34.sslip.io (a free name that points at your server's IP).
-  # Our own HTTPS front door, used only when nothing else holds port 443
+  # Used only when nothing else holds port 443
   # (`docker compose --profile own-https up -d`). If another app's Caddy already
   # runs on this server, scripts/share_caddy.sh adds wa-crm to that one instead.
   # Uses port 443 only, so port 80 stays free for other apps on the server.
