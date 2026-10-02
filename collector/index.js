@@ -11,7 +11,7 @@
 //   DATA_DIR=/data                       login sessions + messages.db live here
 //   HISTORY_DAYS=45                      how far back to load chat history on each start
 
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import pkg from 'whatsapp-web.js'
 import qrcode from 'qrcode-terminal'
@@ -100,7 +100,18 @@ async function backfill(account, client) {
   console.log(`[${account}] history loaded: ${saved} messages from ${chats.length} chats`)
 }
 
+// A browser that died without shutting down (container restart, crash) leaves lock
+// files behind, and the next Chromium refuses to open the profile ("profile appears
+// to be in use"). Nothing else uses this profile, so clear them before launching.
+function clearProfileLocks(account) {
+  const dir = join(DATA_DIR, 'wwebjs-auth', `session-${account}`)
+  for (const f of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
+    try { rmSync(join(dir, f), { force: true }) } catch {}
+  }
+}
+
 function start(account, attempt = 0) {
+  clearProfileLocks(account)
   const phone = (process.env[`WA_PHONE_${account.toUpperCase()}`] || '').replace(/\D/g, '')
   const client = new Client({
     authStrategy: new LocalAuth({ clientId: account, dataPath: join(DATA_DIR, 'wwebjs-auth') }),
