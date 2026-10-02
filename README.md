@@ -34,7 +34,7 @@ Phones ──(linked device)──► Free cloud server ── saves messages 24
 - Choose an **Ubuntu** (or Debian) template. If you're on a different OS, you can switch it under hPanel → VPS → *OS & Panel*.
 - Log in through hPanel's **Browser terminal**, or `ssh root@<VPS IP>`.
 - In hPanel → VPS → **Firewall**: if a firewall is enabled, allow TCP ports **80** and **443**.
-- Port **443** must be free. Port 80 is left alone, so a website or WA blast tool already using it keeps working. If 443 is taken, the installer stops without changing anything.
+- If another app already runs **Caddy** on ports 80/443 (a WA blast tool, for example), the installer adds one entry for wa-crm to that Caddy instead of starting a second one (`scripts/share_caddy.sh`). It backs up the config first, checks it before applying, and reloads without restarting, so the other app keeps working. If something other than Caddy holds port 443, the installer stops without changing anything.
 - It needs about 500 MB of free RAM. The smallest Hostinger plan is enough.
 
 **No server yet?** Create a free Oracle one (about 15 minutes, one time):

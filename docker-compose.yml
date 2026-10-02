@@ -7,14 +7,18 @@ services:
     env_file: .env
     volumes:
       - ./data:/data
-    expose:
-      - "8080"            # only reachable through Caddy below, never directly
+    ports:
+      - "127.0.0.1:8090:8080"   # localhost only: reached through Caddy, never directly
 
   # HTTPS in front of the API so chats are encrypted on the way to the Claude Routine.
   # DOMAIN is e.g. 141-147-12-34.sslip.io (a free name that points at your server's IP).
+  # Our own HTTPS front door, used only when nothing else holds port 443
+  # (`docker compose --profile own-https up -d`). If another app's Caddy already
+  # runs on this server, scripts/share_caddy.sh adds wa-crm to that one instead.
   # Uses port 443 only, so port 80 stays free for other apps on the server.
   caddy:
     image: caddy:2
+    profiles: ["own-https"]
     restart: unless-stopped
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN in .env}

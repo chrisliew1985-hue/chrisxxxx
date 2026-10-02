@@ -19,11 +19,18 @@ others_443="$( {
   ss -ltnpH 2>/dev/null | awk '$4 ~ /[:.]443$/' | grep -v docker-proxy
   docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null | grep -E ':443->' | grep -v '^wa-crm-caddy'
 } || true )"
+HTTPS_MODE="own"
 if [ -n "$others_443" ]; then
-  echo "Port 443 is already used by another app on this server:"
-  echo "$others_443"
-  echo "Nothing was changed. Send this output to get a setup that shares the port."
-  exit 1
+  if echo "$others_443" | grep -q caddy; then
+    # Another app's Caddy (e.g. a WA blast tool) already serves 80/443: share it.
+    HTTPS_MODE="shared"
+    echo "Port 443 is used by another app's Caddy; wa-crm will be added to it (that app keeps working)."
+  else
+    echo "Port 443 is already used by another app on this server:"
+    echo "$others_443"
+    echo "Nothing was changed. Send this output to get a setup that shares the port."
+    exit 1
+  fi
 fi
 
 echo "== Installing Docker =="
@@ -97,7 +104,13 @@ ENV
 fi
 
 echo "== Starting =="
-sudo docker compose up -d --build --remove-orphans
+if [ "$HTTPS_MODE" = "own" ]; then
+  sudo docker compose --profile own-https up -d --build --remove-orphans
+else
+  sudo docker compose rm -sf caddy >/dev/null 2>&1 || true   # a failed earlier attempt
+  sudo docker compose up -d --build --remove-orphans
+  bash "$DIR/scripts/share_caddy.sh"
+fi
 
 DOMAIN="$(grep '^DOMAIN=' .env | cut -d= -f2)"
 for _ in $(seq 1 30); do
