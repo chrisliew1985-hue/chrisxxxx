@@ -1,0 +1,243 @@
+<title>Chris 广告总控台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Noto+Sans+SC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: phone-first single column. Verdict + approvals on top (what needs Chris), then tabs per channel, then report log. */
+:root{
+  --bg:#f3f5f4; --card:#ffffff; --sunk:#e8ecea; --line:#d7dddb;
+  --fg:#14201c; --fg2:#4a5a55; --fg3:#71807b;
+  --accent:#0f6b5c; --accent-fg:#ffffff; --accent-soft:#dcefea;
+  --ok:#17803d; --ok-bg:#e3f4e8; --warn:#a15c00; --warn-bg:#fdf0db; --bad:#b4232c; --bad-bg:#fbe5e6;
+  --bar:#9fbdb5; --bar-hi:#0f6b5c; --dot:#d4880f;
+  --display:"Bricolage Grotesque","Noto Sans SC",system-ui,sans-serif;
+  --body:"Noto Sans SC",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1513; --card:#151f1c; --sunk:#1c2925; --line:#2a3a35;
+  --fg:#e6eeeb; --fg2:#a9bab4; --fg3:#7f918b;
+  --accent:#4fc1a8; --accent-fg:#06221c; --accent-soft:#16352e;
+  --ok:#5fd28a; --ok-bg:#12321f; --warn:#f0b35a; --warn-bg:#3a2a10; --bad:#f2777e; --bad-bg:#3b1618;
+  --bar:#33584f; --bar-hi:#4fc1a8; --dot:#f0b35a; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0e1513; --card:#151f1c; --sunk:#1c2925; --line:#2a3a35;
+  --fg:#e6eeeb; --fg2:#a9bab4; --fg3:#7f918b;
+  --accent:#4fc1a8; --accent-fg:#06221c; --accent-soft:#16352e;
+  --ok:#5fd28a; --ok-bg:#12321f; --warn:#f0b35a; --warn-bg:#3a2a10; --bad:#f2777e; --bad-bg:#3b1618;
+  --bar:#33584f; --bar-hi:#4fc1a8; --dot:#f0b35a; color-scheme:dark;}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.6 var(--body);margin:0}
+.wrap{max-width:980px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 56px;display:grid;gap:20px}
+.num,.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 16px}
+h1{font:700 26px/1.15 var(--display);margin:0;letter-spacing:-.01em;text-wrap:balance}
+.sub{color:var(--fg3);font-size:13px}
+h2{font:700 17px/1.3 var(--display);margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap;background:var(--sunk);color:var(--fg2)}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.pill.ok{background:var(--ok-bg);color:var(--ok)} .pill.warn{background:var(--warn-bg);color:var(--warn)} .pill.bad{background:var(--bad-bg);color:var(--bad)}
+.pill.plain::before{display:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:grid;gap:12px;min-width:0}
+.verdict{border-left:5px solid var(--fg3)}
+.verdict.ok{border-left-color:var(--ok)} .verdict.warn{border-left-color:var(--warn)} .verdict.bad{border-left-color:var(--bad)}
+.verdict p{margin:0;font-size:16px}
+.verdict ul{margin:0;padding-left:20px;display:grid;gap:4px;color:var(--fg2)}
+.meta{display:flex;flex-wrap:wrap;gap:6px 14px;color:var(--fg3);font-size:12px}
+.sugs{display:grid;gap:10px}
+.sug{border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;gap:8px;background:var(--card)}
+.sug .top{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.sug .ttl{font-weight:700;font-size:15px;min-width:0;overflow-wrap:anywhere}
+.sug .why{color:var(--fg2);font-size:14px;margin:0}
+.chg{font-family:var(--mono);font-size:13px;background:var(--sunk);border-radius:8px;padding:6px 10px;overflow-wrap:anywhere}
+.acts{display:flex;flex-wrap:wrap;gap:8px}
+button{font:500 14px var(--body);border-radius:10px;padding:8px 16px;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--fg)}
+button.yes{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+button:disabled{opacity:.55;cursor:default}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tab{border-radius:999px;padding:6px 14px;font-size:14px;background:transparent}
+.tab[aria-selected="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.kpi{background:var(--sunk);border-radius:10px;padding:10px 12px;display:grid;gap:2px;min-width:0}
+.kpi .l{font-size:12px;color:var(--fg3)} .kpi .v{font:500 20px var(--mono);font-variant-numeric:tabular-nums} .kpi .n{font-size:11px;color:var(--fg3)}
+.chart{overflow-x:auto} .chart svg{display:block;width:100%;min-width:520px;height:auto}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--fg3);flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:600px}
+th{font-weight:500;color:var(--fg3);text-align:right;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:8px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+th:first-child,td:first-child{text-align:left;font-family:var(--body);white-space:normal;min-width:180px}
+td .nm{font-weight:500} td .nt{font-size:12px;color:var(--fg3);font-family:var(--body)}
+.empty{color:var(--fg3);font-size:14px;padding:6px 0}
+.hist{display:grid;gap:6px}
+.hist .row{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;font-size:13px;color:var(--fg2);border-bottom:1px solid var(--line);padding-bottom:6px}
+.hist .row b{color:var(--fg);font-weight:500}
+details.rep{border-bottom:1px solid var(--line);padding-block:8px}
+details.rep summary{cursor:pointer;display:flex;flex-wrap:wrap;gap:8px;align-items:center;list-style:none}
+details.rep summary::-webkit-details-marker{display:none}
+details.rep .body{color:var(--fg2);font-size:14px;padding-top:6px;white-space:pre-wrap}
+a{color:var(--accent)}
+@media (max-width:640px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))} h1{font-size:22px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Chris 广告总控台</h1>
+      <div class="sub">Google Ads · Meta Ads · SEO，每天早上 10 点自动检查更新</div>
+    </div>
+    <span class="pill" id="overall">读取中</span>
+  </header>
+
+  <section class="card verdict" id="verdict">
+    <h2>今天的结论</h2>
+    <p id="vText">正在读取最新报告。每天早上 10 点检查完，结论会出现在这里。</p>
+    <ul id="vList" hidden></ul>
+    <div class="meta"><span id="vUpdated">还没有更新</span><span>下次检查：每天 10:00（马来西亚时间）</span></div>
+  </section>
+
+  <section class="card">
+    <h2>等你决定 <span class="pill plain" id="pendCount">0</span></h2>
+    <div class="sub">点「批准」，下一次 10 点检查时 Claude 会帮你改；点「不要」，就保持原样。急的话可以在聊天里说「执行」。</div>
+    <div class="sugs" id="pending"><div class="empty">现在没有要你决定的建议。</div></div>
+    <details id="histBox">
+      <summary class="sub" style="cursor:pointer">已处理的建议</summary>
+      <div class="hist" id="history"><div class="empty">还没有。</div></div>
+    </details>
+  </section>
+
+  <section class="card">
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-google" data-t="google" aria-selected="true">Google Ads</button>
+      <button class="tab" role="tab" id="tab-meta" data-t="meta" aria-selected="false">Meta Ads</button>
+      <button class="tab" role="tab" id="tab-seo" data-t="seo" aria-selected="false">SEO</button>
+    </div>
+
+    <div id="p-google" role="tabpanel" style="display:grid;gap:14px">
+      <div class="kpis" id="gK"></div>
+      <div>
+        <div class="legend"><span><i style="background:var(--bar)"></i>每天花费 (RM)</span><span><i style="background:var(--dot);border-radius:50%"></i>转化</span><span id="gRange"></span></div>
+        <div class="chart" id="gChart"><div class="empty">每日花费图会在第一次数据同步后出现。</div></div>
+      </div>
+      <div class="tbl"><table><thead><tr><th>Campaign（近 30 天）</th><th>预算/天</th><th>花费</th><th>点击</th><th>CTR</th><th>转化</th><th>每转化</th><th>因预算少曝光</th></tr></thead><tbody id="gT"><tr><td colspan="8" class="empty">还没有数据。</td></tr></tbody></table></div>
+    </div>
+
+    <div id="p-meta" role="tabpanel" hidden style="display:grid;gap:14px">
+      <div class="kpis" id="mK"></div>
+      <div class="tbl"><table><thead><tr><th>Campaign（近 30 天）</th><th>状态</th><th>花费</th><th>点击</th><th>CTR</th><th>结果</th><th>每结果</th></tr></thead><tbody id="mT"><tr><td colspan="7" class="empty">还没有数据。</td></tr></tbody></table></div>
+    </div>
+
+    <div id="p-seo" role="tabpanel" hidden style="display:grid;gap:14px">
+      <div class="sub">数据来自 <a href="https://claude.ai/artifact/FNwcczoLWgqRnPGQzdpYQ8" target="_blank" rel="noopener">SEO Autopilot</a>（每 8 小时跑一次），这里每天 10 点同步一次。</div>
+      <div class="kpis" id="sK"></div>
+      <div class="tbl"><table><thead><tr><th>网站</th><th>页面</th><th>曝光 28天</th><th>点击 28天</th><th>状态</th></tr></thead><tbody id="sT"><tr><td colspan="5" class="empty">还没有数据。</td></tr></tbody></table></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>每日报告</h2>
+    <div id="reports"><div class="empty">每天 10 点的报告会一条条记录在这里。</div></div>
+  </section>
+</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const rm=v=>v==null||v===""?"–":"RM"+Number(v).toLocaleString("en-MY",{maximumFractionDigits:Number(v)<100?2:0});
+  const n=v=>v==null||v===""?"–":Number(v).toLocaleString("en-MY",{maximumFractionDigits:1});
+  const pct=v=>v==null||v===""?"–":(Number(v)*100).toFixed(1)+"%";
+  const tz="Asia/Kuala_Lumpur";
+  const when=iso=>{const d=new Date(iso);return isNaN(d)?esc(iso):d.toLocaleString("zh-CN",{timeZone:tz,month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit",hour12:false});};
+  const lvl={ok:["ok","表现正常"],warn:["warn","需要注意"],bad:["bad","有问题"]};
+  const stLabel={pending:"等你决定",approved:"已批准，等执行",rejected:"不要，保持原样",done:"已执行",failed:"执行失败"};
+  const stCls={approved:"warn",rejected:"",done:"ok",failed:"bad"};
+  const S={status:null,sugs:[],google:[],gdaily:[],meta:[],seo:[],reports:[]};
+  let db=null; const busy=new Set();
+
+  function kpis(el,items){el.innerHTML=items.map(([l,v,nt])=>`<div class="kpi"><span class="l">${esc(l)}</span><span class="v">${v}</span><span class="n">${esc(nt||"")}</span></div>`).join("");}
+
+  function chart(){
+    const d=[...S.gdaily].sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    if(!d.length) return;
+    const W=760,H=200,L=44,R=12,T=12,B=26,iw=W-L-R,ih=H-T-B;
+    const maxS=Math.max(1,...d.map(x=>+x.spend||0)); const top=Math.ceil(maxS/50)*50;
+    const maxC=Math.max(1,...d.map(x=>+x.conv||0));
+    const bw=iw/d.length; let g="";
+    for(let k=0;k<=4;k++){const v=top*k/4,y=T+ih-ih*v/top;g+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-width="1"/><text x="${L-6}" y="${y+4}" text-anchor="end" font-size="11" fill="var(--fg3)" font-family="IBM Plex Mono,monospace">${v}</text>`;}
+    d.forEach((x,i)=>{const h=ih*(+x.spend||0)/top,xx=L+i*bw+bw*.15,last=i===d.length-1;
+      g+=`<rect x="${xx}" y="${T+ih-h}" width="${bw*.7}" height="${h}" rx="2" fill="${last?"var(--bar-hi)":"var(--bar)"}"><title>${esc(x.date)}  RM${(+x.spend).toFixed(2)} · ${x.conv} 转化</title></rect>`;
+      if(+x.conv>0){const cy=T+ih-ih*(+x.conv)/maxC*.92;g+=`<circle cx="${xx+bw*.35}" cy="${cy}" r="4" fill="var(--dot)"/>`;}
+      if(i%5===0||last) g+=`<text x="${xx+bw*.35}" y="${H-8}" text-anchor="middle" font-size="11" fill="var(--fg3)" font-family="IBM Plex Mono,monospace">${esc(String(x.date).slice(5))}</text>`;});
+    $("gChart").innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Google Ads 每日花费与转化">${g}</svg>`;
+    $("gRange").textContent=`${d[0].date} 到 ${d[d.length-1].date}，橙点越高转化越多`;
+  }
+
+  function render(){
+    const st=S.status||{}; const o=lvl[st.overall];
+    $("overall").className="pill "+(o?o[0]:""); $("overall").textContent=o?o[1]:"等待第一次检查";
+    $("verdict").className="card verdict "+(o?o[0]:"");
+    if(st.summary) $("vText").textContent=st.summary;
+    const pts=Array.isArray(st.points)?st.points:[];
+    $("vList").hidden=!pts.length; $("vList").innerHTML=pts.map(p=>`<li>${esc(p)}</li>`).join("");
+    $("vUpdated").textContent=st.updated?"更新于 "+when(st.updated):"还没有更新";
+
+    const pend=S.sugs.filter(s=>s.status==="pending").sort((a,b)=>(a.priority||9)-(b.priority||9));
+    $("pendCount").textContent=pend.length;
+    $("pending").innerHTML=pend.length?pend.map(s=>`<div class="sug">
+      <div class="top"><span class="pill plain">${esc(s.platform||"")}</span>${s.priority===1?'<span class="pill bad">紧急</span>':""}<span class="ttl">${esc(s.title)}</span></div>
+      <p class="why">${esc(s.why)}</p>
+      ${s.change?`<div class="chg">${esc(s.change)}</div>`:""}
+      <div class="acts"><button class="yes" id="y-${esc(s.id)}" data-id="${esc(s.id)}" data-v="approved" ${busy.has(s.id)?"disabled":""}>批准</button><button id="n-${esc(s.id)}" data-id="${esc(s.id)}" data-v="rejected" ${busy.has(s.id)?"disabled":""}>不要</button></div>
+    </div>`).join(""):`<div class="empty">现在没有要你决定的建议。</div>`;
+    const hist=S.sugs.filter(s=>s.status!=="pending").sort((a,b)=>String(b.decided_at||b.created||"").localeCompare(String(a.decided_at||a.created||"")));
+    $("history").innerHTML=hist.length?hist.map(s=>`<div class="row"><span class="pill ${stCls[s.status]||""}">${esc(stLabel[s.status]||s.status)}</span><b>${esc(s.title)}</b>${s.result?`<span>${esc(s.result)}</span>`:""}</div>`).join(""):`<div class="empty">还没有。</div>`;
+
+    // Google
+    const g=S.google; const sum=k=>g.reduce((a,x)=>a+(+x[k]||0),0);
+    const gs=sum("spend30"),gc=sum("conv30");
+    kpis($("gK"),[["30 天花费",rm(gs),"所有 campaign"],["30 天转化",n(gc),"WhatsApp / 表单等"],["平均每转化",gc?rm(gs/gc):"–","越低越好"],["正在跑",String(g.filter(x=>x.status==="ENABLED").length),"个 campaign"]]);
+    chart();
+    const gr=[...g].sort((a,b)=>(b.status==="ENABLED")-(a.status==="ENABLED")||(+b.spend30||0)-(+a.spend30||0));
+    if(gr.length) $("gT").innerHTML=gr.map(x=>`<tr><td><div class="nm">${esc(x.name)}</div><div class="nt"><span class="pill ${x.health==="bad"?"bad":x.health==="warn"?"warn":x.status==="ENABLED"?"ok":""}">${x.status==="ENABLED"?"在跑":"已暂停"}</span> ${esc(x.note||"")}</div></td><td>${x.status==="ENABLED"?rm(x.budget):"–"}</td><td>${rm(x.spend30)}</td><td>${n(x.clicks30)}</td><td>${pct(x.ctr30)}</td><td>${n(x.conv30)}</td><td>${x.conv30?rm(x.cpa30):"–"}</td><td>${pct(x.lost_budget)}</td></tr>`).join("");
+
+    // Meta
+    const m=S.meta; const ms=m.reduce((a,x)=>a+(+x.spend30||0),0);
+    kpis($("mK"),[["30 天花费",rm(ms),"Meta 广告账号"],["正在跑",String(m.filter(x=>x.status==="ACTIVE").length),"个 campaign"],["有花钱的",String(m.length),"个 campaign"],["WhatsApp 对话",n(m.filter(x=>/对话|message/i.test(x.result_type||"")).reduce((a,x)=>a+(+x.results||0),0)),"近 30 天"]]);
+    if(m.length) $("mT").innerHTML=[...m].sort((a,b)=>(+b.spend30||0)-(+a.spend30||0)).map(x=>`<tr><td><div class="nm">${esc(x.name)}</div>${x.note?`<div class="nt">${esc(x.note)}</div>`:""}</td><td><span class="pill ${x.status==="ACTIVE"?"ok":""}">${x.status==="ACTIVE"?"在跑":"已暂停"}</span></td><td>${rm(x.spend30)}</td><td>${n(x.clicks30)}</td><td>${esc(x.ctr||"–")}</td><td>${n(x.results)} <span class="nt">${esc(x.result_type||"")}</span></td><td>${rm(x.cpr)}</td></tr>`).join("");
+
+    // SEO
+    const s=S.seo; const si=s.reduce((a,x)=>a+(+x.impr28||0),0), sc=s.reduce((a,x)=>a+(+x.clicks28||0),0);
+    kpis($("sK"),[["网站",String(s.length),"在跑 SEO"],["页面",n(s.reduce((a,x)=>a+(+x.pages||0),0)),"已上线"],["28 天曝光",n(si),"Google 搜索"],["28 天点击",n(sc),si?"点击率 "+(sc/si*100).toFixed(1)+"%":""]]);
+    if(s.length) $("sT").innerHTML=[...s].sort((a,b)=>(+b.impr28||0)-(+a.impr28||0)).map(x=>`<tr><td><div class="nm"><a href="https://${esc(x.domain)}" target="_blank" rel="noopener">${esc(x.domain)}</a></div>${x.note?`<div class="nt">${esc(x.note)}</div>`:""}</td><td>${n(x.pages)}</td><td>${n(x.impr28)}</td><td>${n(x.clicks28)}</td><td><span class="pill ${x.health==="ok"?"ok":x.health==="bad"?"bad":"warn"}">${x.health==="ok"?"正常":x.health==="bad"?"有问题":"注意"}</span></td></tr>`).join("");
+
+    // Reports
+    const reps=[...S.reports].sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,30);
+    if(reps.length) $("reports").innerHTML=reps.map((r,i)=>`<details class="rep" ${i===0?"open":""}><summary><span class="mono">${esc(r.date)}</span><span class="pill ${(lvl[r.overall]||[""])[0]}">${esc((lvl[r.overall]||["","报告"])[1])}</span><span>${esc(r.headline||"")}</span></summary><div class="body">${esc(r.body||"")}</div></details>`).join("");
+  }
+
+  document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{
+    document.querySelectorAll(".tab").forEach(x=>x.setAttribute("aria-selected",x===b?"true":"false"));
+    ["google","meta","seo"].forEach(t=>{$("p-"+t).hidden=t!==b.dataset.t;});
+  }));
+
+  $("pending").addEventListener("click",async e=>{
+    const b=e.target.closest("button[data-id]"); if(!b||!db) return;
+    const id=b.dataset.id; if(busy.has(id)) return; busy.add(id); render();
+    try{ await db.doc("suggestions/"+id).update({status:b.dataset.v,decided_at:new Date().toISOString()}); }
+    catch(err){ $("pendCount").textContent="没保存到，请再点一次"; }
+    finally{ busy.delete(id); render(); }
+  });
+
+  render();
+  (async()=>{
+    db=await window.claude?.use?.("db");
+    if(!db){ $("vText").textContent="要登录 claude.ai 才能看到实时数据。"; return; }
+    const sub=(c,k)=>db.collection(c).onSnapshot(sn=>{S[k]=sn.docs.map(d=>({id:d.id,...d.data()}));render();},()=>{});
+    sub("suggestions","sugs"); sub("google","google"); sub("google_daily","gdaily"); sub("meta_ads","meta"); sub("seo","seo"); sub("reports","reports");
+    db.doc("status/latest").onSnapshot(d=>{S.status=d.exists?d.data():null;render();},()=>{});
+  })();
+})();
+</script>
