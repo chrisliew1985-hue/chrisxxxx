@@ -132,7 +132,7 @@ a{color:var(--accent)}
     <div id="p-seo" role="tabpanel" hidden style="display:grid;gap:14px">
       <div class="sub">数据来自 <a href="https://claude.ai/artifact/FNwcczoLWgqRnPGQzdpYQ8" target="_blank" rel="noopener">SEO Autopilot</a>（每 8 小时跑一次），这里每天 10 点同步一次。</div>
       <div class="kpis" id="sK"></div>
-      <div class="tbl"><table><thead><tr><th>网站</th><th>页面</th><th>曝光 28天</th><th>点击 28天</th><th>状态</th></tr></thead><tbody id="sT"><tr><td colspan="5" class="empty">还没有数据。</td></tr></tbody></table></div>
+      <div class="tbl"><table><thead><tr><th>网站</th><th>页面</th><th>曝光 7天</th><th>点击 7天</th><th>状态</th></tr></thead><tbody id="sT"><tr><td colspan="5" class="empty">还没有数据。</td></tr></tbody></table></div>
     </div>
   </section>
 
@@ -210,7 +210,7 @@ a{color:var(--accent)}
 
     // SEO
     const s=S.seo; const si=s.reduce((a,x)=>a+(+x.impr28||0),0), sc=s.reduce((a,x)=>a+(+x.clicks28||0),0);
-    kpis($("sK"),[["网站",String(s.length),"在跑 SEO"],["页面",n(s.reduce((a,x)=>a+(+x.pages||0),0)),"已上线"],["28 天曝光",n(si),"Google 搜索"],["28 天点击",n(sc),si?"点击率 "+(sc/si*100).toFixed(1)+"%":""]]);
+    kpis($("sK"),[["网站",String(s.length),"在跑 SEO"],["页面",n(s.reduce((a,x)=>a+(+x.pages||0),0)),"已上线"],["7 天曝光",n(si),"Google 搜索"],["7 天点击",n(sc),si?"点击率 "+(sc/si*100).toFixed(1)+"%":""]]);
     if(s.length) $("sT").innerHTML=[...s].sort((a,b)=>(+b.impr28||0)-(+a.impr28||0)).map(x=>`<tr><td><div class="nm"><a href="https://${esc(x.domain)}" target="_blank" rel="noopener">${esc(x.domain)}</a></div>${x.note?`<div class="nt">${esc(x.note)}</div>`:""}</td><td>${n(x.pages)}</td><td>${n(x.impr28)}</td><td>${n(x.clicks28)}</td><td><span class="pill ${x.health==="ok"?"ok":x.health==="bad"?"bad":"warn"}">${x.health==="ok"?"正常":x.health==="bad"?"有问题":"注意"}</span></td></tr>`).join("");
 
     // Reports
